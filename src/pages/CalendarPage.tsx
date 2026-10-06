@@ -15,6 +15,7 @@ export default function CalendarPage() {
   const [reqs, setReqs] = useState<OHRequest[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tab, setTab] = useState<"schedule" | "office">("schedule");
+  const [view, setView] = useState<"month" | "list">("month");
   const reload = useCallback(async () => {
     const [s, d, sl, r] = await Promise.all([store.settings(), store.calendarDays(), store.slots(), store.ohRequests()]);
     setSettings(s); setDays(d); setSlots(sl); setReqs(r);
@@ -31,8 +32,13 @@ export default function CalendarPage() {
           <p className="muted">Starts {fmtLong(settings.start_date)}, ends {last ? fmtLong(last.date) : "—"}. {days.filter(d => d.kind === "holiday").length} holidays, {days.filter(d => d.kind === "buffer").length} buffer days.</p></div>
         <div className="tabs" style={{ borderBottom: 0 }}><button className={tab === "schedule" ? "on" : ""} onClick={() => setTab("schedule")}>Schedule</button><button className={tab === "office" ? "on" : ""} onClick={() => setTab("office")}>Office hours{reqs.filter(r => r.status === "pending").length ? ` (${reqs.filter(r => r.status === "pending").length})` : ""}</button></div>
       </div>
-      {tab === "schedule" ? <Schedule schedule={schedule} days={days} isInstr={!!isInstr} onChange={async (d) => { await store.setCalendarDay(d); await reload(); toast("Calendar updated"); }} />
-        : <OfficeHours slots={slots} reqs={reqs} profiles={profiles} isInstr={!!isInstr} userId={user!.id} reload={reload} toast={toast} />}
+      {tab === "schedule" && <div className="row between" style={{ marginBottom: 12 }}><div className="chips"><button className={view === "month" ? "on" : ""} onClick={() => setView("month")}>Month</button><button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>Full list</button></div>
+        <div className="row small muted"><span className="ev" style={{ background: "var(--accent-soft)", color: "var(--accent)", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Session</span><span style={{ background: "var(--panel-2)", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Holiday</span><span style={{ background: "var(--warn-soft)", color: "var(--warn)", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Buffer</span><span style={{ background: "var(--good-soft)", color: "var(--good)", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Office hours</span></div></div>}
+      {tab === "schedule" && view === "month" && <MonthView schedule={schedule} days={days} reqs={reqs} isInstr={!!isInstr} onChange={async (d) => { await store.setCalendarDay(d); await reload(); toast("Calendar updated"); }} />}
+      {tab === "schedule" && view === "list" && <Schedule schedule={schedule} days={days} isInstr={!!isInstr} onChange={async (d) => { await store.setCalendarDay(d); await reload(); toast("Calendar updated"); }} />}
+      {tab === "office" ? <OfficeHours slots={slots} reqs={reqs} profiles={profiles} isInstr={!!isInstr} userId={user!.id} reload={reload} toast={toast} /> : null}
+      {false && <Schedule schedule={schedule} days={days} isInstr={!!isInstr} onChange={async () => {}} />
+}
     </>
   );
 }
@@ -136,4 +142,51 @@ function DeclineBtn({ onDecline }: { onDecline: (note: string) => Promise<void> 
   const [open, setOpen] = useState(false); const [note, setNote] = useState("");
   if (!open) return <button className="btn ghost sm" onClick={() => setOpen(true)}>Decline</button>;
   return <div className="row" style={{ gap: 6 }}><input placeholder="Optional note, e.g. another time" value={note} onChange={e => setNote(e.target.value)} style={{ width: 200, padding: "5px 8px" }} /><button className="btn sm danger" onClick={() => onDecline(note)}>Confirm</button><button className="btn ghost sm" onClick={() => setOpen(false)}>Back</button></div>;
+}
+
+function MonthView({ schedule, days, reqs, isInstr, onChange }: { schedule: ScheduledDay[]; days: CalendarDay[]; reqs: OHRequest[]; isInstr: boolean; onChange: (d: CalendarDay | { day: string; remove: true }) => Promise<void> }) {
+  const todayIso = iso(new Date());
+  const first = schedule[0]?.date || todayIso;
+  const initial = todayIso >= first && todayIso <= (schedule[schedule.length - 1]?.date || todayIso) ? todayIso : first;
+  const [ym, setYm] = useState(initial.slice(0, 7));
+  const [adding, setAdding] = useState<{ day: string; kind: "holiday" | "buffer"; label: string } | null>(null);
+  const [y, m] = ym.split("-").map(Number);
+  const firstDay = new Date(y, m - 1, 1); const startPad = firstDay.getDay(); const dim = new Date(y, m, 0).getDate();
+  const cells: (string | null)[] = [...Array(startPad).fill(null), ...Array.from({ length: dim }, (_, i) => `${ym}-${String(i + 1).padStart(2, "0")}`)];
+  while (cells.length % 7) cells.push(null);
+  const byDate = new Map(schedule.map(d => [d.date, d]));
+  const ohByDate = new Map<string, OHRequest[]>(); reqs.filter(r => r.status === "accepted" || r.status === "pending").forEach(r => { const k = r.requested_at.slice(0, 10); ohByDate.set(k, [...(ohByDate.get(k) || []), r]); });
+  const shift = (n: number) => { const d = new Date(y, m - 1 + n, 1); setYm(iso(new Date(d.getFullYear(), d.getMonth(), 1, 12))); };
+  const label = new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return (
+    <div className="card">
+      <div className="row between" style={{ marginBottom: 12 }}>
+        <div className="row"><button className="btn ghost sm" onClick={() => shift(-1)} aria-label="Previous month">‹</button><h3 style={{ minWidth: 170, textAlign: "center" }}>{label}</h3><button className="btn ghost sm" onClick={() => shift(1)} aria-label="Next month">›</button><button className="btn ghost sm" onClick={() => setYm(todayIso.slice(0, 7))}>Today</button></div>
+        {isInstr && <span className="small muted">Click any class day to add a holiday or buffer day.</span>}
+      </div>
+      {adding && <div className="row" style={{ marginBottom: 12, alignItems: "flex-end" }}>
+        <span className="pill acc">{fmtLong(adding.day)}</span>
+        <select value={adding.kind} onChange={e => setAdding({ ...adding, kind: e.target.value as "holiday" | "buffer" })} style={{ width: "auto" }}><option value="buffer">Buffer (catch-up, no new session)</option><option value="holiday">Holiday (no class)</option></select>
+        <input placeholder={adding.kind === "buffer" ? "Catch-up day" : "Thanksgiving"} value={adding.label} onChange={e => setAdding({ ...adding, label: e.target.value })} style={{ flex: 1, minWidth: 160 }} />
+        <button className="btn" onClick={async () => { await onChange({ day: adding.day, kind: adding.kind, label: adding.label || null }); setAdding(null); }}>Save</button>
+        <button className="btn ghost" onClick={() => setAdding(null)}>Cancel</button>
+      </div>}
+      <div className="month">
+        {WEEKDAYS.map(w => <div className="dow" key={w}>{w}</div>)}
+        {cells.map((d, k) => {
+          if (!d) return <div key={k} className="mday out" style={{ border: "none", background: "transparent" }} />;
+          const sd = byDate.get(d); const ex = days.find(x => x.day === d); const oh = ohByDate.get(d) || [];
+          const cls = `mday ${d === todayIso ? "today" : ""} ${sd && sd.kind !== "session" ? "off" : ""}`;
+          return (
+            <div key={d} className={cls} onClick={isInstr && sd && sd.kind === "session" ? () => setAdding({ day: d, kind: "buffer", label: "" }) : undefined} style={isInstr && sd?.kind === "session" ? { cursor: "pointer" } : {}}>
+              <div className="row between"><span className="dn">{Number(d.slice(8))}</span>{ex && isInstr && <button className="btn ghost xs" style={{ padding: "0 5px" }} onClick={e => { e.stopPropagation(); onChange({ day: d, remove: true }); }} aria-label="Remove">×</button>}</div>
+              {sd?.kind === "session" && <Link to={`/session/${sd.session!.id}`} className="ev" title={sd.session!.title} onClick={e => e.stopPropagation()}>W{sd.session!.week} D{sd.session!.day} · {sd.session!.title}</Link>}
+              {sd && sd.kind !== "session" && <span className={`ev ${sd.kind === "holiday" ? "hol" : "buf"}`} title={sd.label}>{sd.label}</span>}
+              {oh.slice(0, 2).map(r => <span key={r.id} className="ev oh" title={r.topic}>{fmtTime(r.requested_at.slice(11, 16))} office hrs{r.status === "pending" ? " (pending)" : ""}</span>)}
+              {oh.length > 2 && <span className="small muted">+{oh.length - 2} more</span>}
+            </div>);
+        })}
+      </div>
+    </div>
+  );
 }

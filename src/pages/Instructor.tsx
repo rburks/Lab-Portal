@@ -20,12 +20,6 @@ export default function Instructor() {
   return (
     <>
       <div className="hero"><div><span className="eyebrow">{students.length} students · Week {Math.max(1, ...d.releases.map(r => SESSIONS.find(s => s.id === r.session_id)?.week || 1))} open</span><h1>Instructor</h1></div>
-        <nav className="tabs" style={{ borderBottom: 0 }}>
-          <NavLink to="/instructor" end className={({ isActive }) => isActive ? "on" : ""} style={{ padding: "8px 12px", textDecoration: "none", borderBottom: "2px solid transparent", fontWeight: 600 }}>Overview</NavLink>
-          <NavLink to="/instructor/grid" className={({ isActive }) => isActive ? "on" : ""} style={{ padding: "8px 12px", textDecoration: "none", borderBottom: "2px solid transparent", fontWeight: 600 }}>Progress grid</NavLink>
-          <NavLink to="/instructor/release" className={({ isActive }) => isActive ? "on" : ""} style={{ padding: "8px 12px", textDecoration: "none", borderBottom: "2px solid transparent", fontWeight: 600 }}>Unlock sessions</NavLink>
-          <NavLink to="/instructor/roster" className={({ isActive }) => isActive ? "on" : ""} style={{ padding: "8px 12px", textDecoration: "none", borderBottom: "2px solid transparent", fontWeight: 600 }}>Roster</NavLink>
-        </nav>
       </div>
       <Routes>
         <Route index element={<Overview d={d} />} />
@@ -172,7 +166,7 @@ function GradeDrawer({ cell, onClose, onSaved }: { cell: Cell; onClose: () => vo
         <div className="row between"><div><span className="eyebrow">Week {s.week} · Day {s.day}</span><h3>{cell.student.full_name}</h3><div className="small muted">{s.title}</div></div><button className="btn ghost sm" onClick={onClose}>Close</button></div>
         <div className="row"><span className={`pill ${cell.state === "graded" ? "good" : cell.state === "submitted" ? "warn" : "acc"}`}>{STATE_LABEL[cell.state]}</span><span className="pill">Lab {labPct(s, cell.p)}%</span>{cell.p?.quiz_best != null && <span className={`pill ${cell.p.quiz_best >= 4 ? "good" : "warn"}`}>Quiz {cell.p.quiz_best}/5 · {cell.p.quiz_attempts} attempt{cell.p.quiz_attempts === 1 ? "" : "s"}</span>}</div>
         {cell.p?.goal && <div><span className="eyebrow">Student's goal</span><p>{cell.p.goal}</p></div>}
-        {s.steps && <div><span className="eyebrow">Core steps</span><div className="stack" style={{ gap: 4, marginTop: 6 }}>{s.steps.map((st, i) => <div key={i} className="small" style={{ display: "grid", gridTemplateColumns: "16px minmax(0,1fr)", gap: 8 }}><span style={{ color: cell.p?.steps?.[i] ? "var(--good)" : "var(--mute)" }}>{cell.p?.steps?.[i] ? "✓" : "○"}</span><span>{st.label}</span></div>)}</div></div>}
+        {s.steps && <div><span className="eyebrow">Steps and checkpoint answers</span><div className="stack" style={{ gap: 8, marginTop: 6 }}>{s.steps.map((st, i) => { const r = (cell.p?.responses || {})[String(i)]; return (<div key={i} className="small" style={{ display: "grid", gridTemplateColumns: "16px minmax(0,1fr)", gap: 8 }}><span style={{ color: cell.p?.steps?.[i] ? "var(--good)" : "var(--mute)" }}>{cell.p?.steps?.[i] ? "✓" : "○"}</span><div><b>{st.label}</b>{r !== undefined && st.checkpoint && <div className="muted" style={{ whiteSpace: "pre-wrap", marginTop: 2 }}>{st.checkpoint.kind === "choice" ? `Picked: ${st.checkpoint.options[r as number]}${r === st.checkpoint.correct ? " ✓" : ""}` : st.checkpoint.kind === "confirm" ? (r ? "Confirmed" : "") : String(r)}</div>}</div></div>); })}</div></div>}
         {cell.p?.sandbox && <div className="callout small">Sandbox: {String((cell.p.sandbox as Record<string, unknown>).train)}% on training data, {String((cell.p.sandbox as Record<string, unknown>).test)}% on test data.</div>}
         <div><span className="eyebrow">Submissions ({cell.subs.length})</span>
           <div className="stack" style={{ gap: 8, marginTop: 6 }}>{cell.subs.map(x => (

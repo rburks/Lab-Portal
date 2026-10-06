@@ -6,7 +6,7 @@ export type { Announcement, CalendarDay, CourseSettings, Flashcard, Message, OHR
 
 export type Role = "student" | "instructor";
 export type Profile = { id: string; email: string; full_name: string; role: Role; created_at: string };
-export type Progress = { student_id: string; session_id: string; steps: boolean[]; goal: string | null; quiz_best: number | null; quiz_last: number | null; quiz_attempts: number; sandbox: Record<string, unknown> | null; updated_at: string };
+export type Progress = { student_id: string; session_id: string; steps: boolean[]; goal: string | null; quiz_best: number | null; quiz_last: number | null; quiz_attempts: number; sandbox: Record<string, unknown> | null; responses: Record<string, unknown>; updated_at: string };
 export type Submission = { id: number; student_id: string; session_id: string; kind: "image" | "link" | "text"; body: string | null; file_path: string | null; created_at: string; url?: string };
 export type Grade = { student_id: string; session_id: string; score: number | null; feedback: string | null; graded_at: string };
 export type Release = { session_id: string; student_id: string | null; unlocked_at: string };
@@ -149,7 +149,7 @@ function seedDemo() {
       const done = Math.round(n * Math.min(1, ability * (1.2 - k * 0.15) + (R() - 0.5) * 0.3));
       const steps = Array.from({ length: n }, (_, j) => j < Math.max(0, done));
       const qb = R() < ability ? 4 + Math.round(R()) : 2 + Math.round(R() * 2);
-      progress.push({ student_id: uid, session_id: s.id, steps, goal: done > 0 ? "Compare three assistants on my job's weekly reporting task." : null, quiz_best: done > 0 ? qb : null, quiz_last: done > 0 ? qb : null, quiz_attempts: done > 0 ? 1 + Math.round(R()) : 0, sandbox: s.sandbox && done > 2 ? { train: 92, test: 71 } : null, updated_at: new Date(Date.now() - 86400000 * (daysAgo + k)).toISOString() });
+      progress.push({ student_id: uid, session_id: s.id, steps, goal: done > 0 ? "Compare three assistants on my job's weekly reporting task." : null, quiz_best: done > 0 ? qb : null, quiz_last: done > 0 ? qb : null, quiz_attempts: done > 0 ? 1 + Math.round(R()) : 0, sandbox: s.sandbox && done > 2 ? { train: 92, test: 71 } : null, responses: done > 1 ? { "1": "1. What does a data engineer do day to day?\n2. Which skills should I learn first?\n3. How is AI changing the role?" } : {}, updated_at: new Date(Date.now() - 86400000 * (daysAgo + k)).toISOString() });
       if (done === n && n > 0) {
         submissions.push({ id: submissions.length + 1, student_id: uid, session_id: s.id, kind: k === 2 ? "link" : "text", body: k === 2 ? "https://docs.google.com/spreadsheets/d/example" : "The model learned the background, not the mug. Every mug photo was on the brown desk.", file_path: null, created_at: new Date(Date.now() - 86400000 * (daysAgo + k)).toISOString() });
         if (R() < 0.7) grades.push({ student_id: uid, session_id: s.id, score: Math.round(60 + ability * 40 - R() * 8), feedback: "Clear failure sentence. Add what data would fix it next time.", graded_at: new Date().toISOString() });
@@ -181,7 +181,7 @@ class DemoStore implements Store {
   async myProgress() { return this.d.progress.filter(p => p.student_id === this.me); }
   async saveProgress(p: Partial<Progress> & { session_id: string }) {
     const i = this.d.progress.findIndex(x => x.student_id === this.me && x.session_id === p.session_id);
-    const base: Progress = i >= 0 ? this.d.progress[i] : { student_id: this.me!, session_id: p.session_id, steps: [], goal: null, quiz_best: null, quiz_last: null, quiz_attempts: 0, sandbox: null, updated_at: "" };
+    const base: Progress = i >= 0 ? this.d.progress[i] : { student_id: this.me!, session_id: p.session_id, steps: [], goal: null, quiz_best: null, quiz_last: null, quiz_attempts: 0, sandbox: null, responses: {}, updated_at: "" };
     const next = { ...base, ...p, updated_at: new Date().toISOString() };
     if (i >= 0) this.d.progress[i] = next; else this.d.progress.push(next);
   }

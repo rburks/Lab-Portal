@@ -12,32 +12,43 @@ import StudyGuide from "./pages/StudyGuide";
 import { useEffect, useState } from "react";
 
 function Shell() {
-  const { user, loading } = useAuth();
+  const { user, loading, mode, setMode } = useAuth();
   if (loading) return <div className="page"><div className="empty">Loading…</div></div>;
   if (!user) return <SignIn />;
   const isInstr = user.role === "instructor";
+  const instrMode = isInstr && mode === "instructor";
   return (
     <>
       {store.demo && <div className="demo-banner">Demo mode: no backend connected. Data resets on reload. Switch users from the top right.</div>}
       <header className="topbar"><div className="in">
         <Link to="/" className="brand"><span className="logo">S/AI</span><b>Software/AI Lab Portal</b></Link>
         <nav className="nav">
-          <NavLink to="/" end>Course</NavLink>
-          <NavLink to="/progress">My progress</NavLink>
-          <NavLink to="/study">Exam guide</NavLink>
-          <NavLink to="/calendar">Calendar</NavLink>
-          <NavLink to="/messages">Messages<Unread /></NavLink>
-          {isInstr && <NavLink to="/instructor">Instructor</NavLink>}
+          {instrMode ? <>
+            <NavLink to="/instructor" end>Dashboard</NavLink>
+            <NavLink to="/instructor/grid">Progress grid</NavLink>
+            <NavLink to="/instructor/release">Unlock</NavLink>
+            <NavLink to="/instructor/roster">Roster</NavLink>
+            <NavLink to="/calendar">Calendar</NavLink>
+            <NavLink to="/messages">Messages<Unread /></NavLink>
+          </> : <>
+            <NavLink to="/" end>Course</NavLink>
+            <NavLink to="/progress">My progress</NavLink>
+            <NavLink to="/study">Exam guide</NavLink>
+            <NavLink to="/calendar">Calendar</NavLink>
+            <NavLink to="/messages">Messages<Unread /></NavLink>
+          </>}
         </nav>
         <div className="row">
+          {isInstr && <div className="mode" role="group" aria-label="View mode"><button className={mode === "instructor" ? "on" : ""} onClick={() => setMode("instructor")}>Instructor</button><button className={mode === "student" ? "on" : ""} onClick={() => setMode("student")}>Student view</button></div>}
           {store.demo && <DemoSwitcher />}
           <span className="small muted">{user.full_name}</span>
           <button className="btn ghost sm" onClick={() => store.signOut()}>Sign out</button>
         </div>
       </div></header>
+      {isInstr && mode === "student" && <div className="mode-banner">Previewing as a student. Sessions appear as the whole class sees them. Switch back to Instructor at the top right.</div>}
       <main className="page">
         <Routes>
-          <Route path="/" element={<CourseMap />} />
+          <Route path="/" element={instrMode ? <Navigate to="/instructor" replace /> : <CourseMap />} />
           <Route path="/session/:id" element={<SessionPage />} />
           <Route path="/progress" element={<MyProgress />} />
           <Route path="/study" element={<StudyGuide />} />

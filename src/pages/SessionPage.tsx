@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { byId, type Session } from "../content/course";
 import { useAuth } from "../auth";
@@ -6,6 +6,7 @@ import { useStudentData } from "./useStudentData";
 import { store, type Progress, type Submission } from "../lib/store";
 import { compressImage, isUnlocked } from "../lib/logic";
 import Sandbox from "../components/Sandbox";
+import GuidedLab from "../components/GuidedLab";
 
 type Tab = "lab" | "sandbox" | "lens" | "quiz" | "submit";
 
@@ -40,33 +41,13 @@ export default function SessionPage() {
       <div className="card pad-lg">
         <div className="tabs">{tabs.map(([k, l]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}</div>
         <div style={{ marginTop: 18 }}>
-          {tab === "lab" && <Lab s={s} p={p} save={save} toast={toast} />}
+          {tab === "lab" && <GuidedLab s={s} p={p} subs={subs} save={save} reload={data.reload} toast={toast} onGoTo={t => setTab(t)} />}
           {tab === "sandbox" && <Sandbox onRecord={r => { save({ sandbox: r }); toast("Sandbox result recorded"); }} />}
           {tab === "lens" && <Lens s={s} />}
           {tab === "quiz" && <Quiz s={s} p={p} save={save} toast={toast} />}
           {tab === "submit" && <Submit s={s} subs={subs} reload={data.reload} toast={toast} />}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Lab({ s, p, save, toast }: { s: Session; p?: Progress; save: (x: Partial<Progress>) => Promise<void>; toast: (m: string) => void }) {
-  const steps = p?.steps || [];
-  const [goal, setGoal] = useState(p?.goal || "");
-  useEffect(() => setGoal(p?.goal || ""), [p?.goal]);
-  return (
-    <div className="reading stack" style={{ gap: 18 }}>
-      <div className="stack" style={{ gap: 6 }}><span className="eyebrow">Your goal first</span><p className="muted">{s.goal}</p>
-        <textarea id="goal" value={goal} onChange={e => setGoal(e.target.value)} onBlur={() => { if (goal !== (p?.goal || "")) { save({ goal }); toast("Goal saved"); } }} placeholder="Write your goal in one or two sentences" /></div>
-      <div className="stack" style={{ gap: 8 }}><span className="eyebrow">Core path</span>
-        <div className="steps">{s.steps!.map((st, i) => (
-          <label key={i} className={`step ${steps[i] ? "done" : ""}`}>
-            <input type="checkbox" checked={!!steps[i]} onChange={e => { const n = [...steps]; while (n.length < s.steps!.length) n.push(false); n[i] = e.target.checked; save({ steps: n }); }} />
-            <div><div className="lbl">{st.label}</div><div className="see">What you should see: {st.see}</div></div>
-          </label>))}</div></div>
-      <div><span className="eyebrow">Stretch path</span><ul className="muted" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{s.stretch!.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
-      <div className="callout"><b>Done when</b><ul>{s.doneWhen!.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
     </div>
   );
 }

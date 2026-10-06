@@ -36,6 +36,7 @@ create table if not exists public.progress (
   quiz_last int,
   quiz_attempts int not null default 0,
   sandbox jsonb,
+  responses jsonb not null default '{}',
   updated_at timestamptz not null default now(),
   primary key (student_id, session_id)
 );
@@ -226,3 +227,6 @@ create policy "ann read" on public.announcements for select to authenticated usi
 create policy "ann instructor" on public.announcements for all to authenticated using (public.is_instructor()) with check (public.is_instructor());
 create policy "flashcards own" on public.flashcards for all to authenticated using (student_id = auth.uid()) with check (student_id = auth.uid());
 create policy "flashcards instructor read" on public.flashcards for select to authenticated using (public.is_instructor());
+
+-- Added October 6 (guided labs): per-step checkpoint answers. Safe to re-run.
+alter table public.progress add column if not exists responses jsonb not null default '{}';
