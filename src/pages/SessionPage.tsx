@@ -3,12 +3,13 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { byId, type Session } from "../content/course";
 import { useAuth } from "../auth";
 import { useStudentData } from "./useStudentData";
-import { store, type Progress, type Submission } from "../lib/store";
+import { store, type Material, type Progress, type Submission } from "../lib/store";
+import { useEffect } from "react";
 import { compressImage, isUnlocked } from "../lib/logic";
 import Sandbox from "../components/Sandbox";
 import GuidedLab from "../components/GuidedLab";
 
-type Tab = "lab" | "sandbox" | "lens" | "quiz" | "submit";
+type Tab = "lab" | "sandbox" | "lens" | "quiz" | "submit" | "resources";
 
 export default function SessionPage() {
   const { id } = useParams();
@@ -16,6 +17,8 @@ export default function SessionPage() {
   const { user, toast } = useAuth();
   const data = useStudentData();
   const [tab, setTab] = useState<Tab>("lab");
+  const [mats, setMats] = useState<Material[]>([]);
+  useEffect(() => { store.materials().then(m => setMats(m.filter(x => x.session_id === id))); }, [id]);
   if (!s) return <Navigate to="/" />;
   if (data.loading) return <div className="empty">Loading…</div>;
   if (!isUnlocked(s.id, user!.id, data.releases)) return <div className="card empty">This session is locked. Your instructor will open it when the class gets there.<br /><Link to="/">Back to course</Link></div>;
@@ -23,7 +26,7 @@ export default function SessionPage() {
   const subs = data.subs.filter(x => x.session_id === s.id);
   const grade = data.grades.find(g => g.session_id === s.id);
   const save = async (patch: Partial<Progress>) => { await store.saveProgress({ session_id: s.id, ...patch }); await data.reload(); };
-  const tabs: [Tab, string][] = [["lab", "Lab"], ...(s.sandbox ? [["sandbox", "Sandbox"] as [Tab, string]] : []), ["lens", "Exam Lens"], ["quiz", "Quiz"], ["submit", subs.length ? `Submit (${subs.length})` : "Submit"]];
+  const tabs: [Tab, string][] = [["lab", "Lab"], ...(s.sandbox ? [["sandbox", "Sandbox"] as [Tab, string]] : []), ["lens", "Exam Lens"], ["quiz", "Quiz"], ["submit", subs.length ? `Submit (${subs.length})` : "Submit"], ["resources", "Resources"]];
 
   if (!s.built) return (
     <div className="card pad-lg reading stack">
@@ -38,6 +41,11 @@ export default function SessionPage() {
         <div><Link to="/" className="small">← Course</Link><div className="eyebrow" style={{ marginTop: 6 }}>Week {s.week} · Day {s.day}</div><h1>{s.title}</h1></div>
         {grade?.score != null && <div className="card" style={{ padding: "10px 14px" }}><span className="eyebrow">Graded</span><div className="bignum">{grade.score}</div>{grade.feedback && <p className="small muted" style={{ maxWidth: 320 }}>{grade.feedback}</p>}</div>}
       </div>
+      {(s.tools?.length || mats.length > 0) && <div className="row" style={{ gap: 8 }}>
+        {mats.filter(m => m.kind === "student_guide").map(m => <a key={m.id} className="btn sm" href={m.url || "#"} target="_blank" rel="noreferrer">📄 Download student guide</a>)}
+        {mats.filter(m => m.kind !== "student_guide").map(m => <a key={m.id} className="btn ghost sm" href={m.url || "#"} target="_blank" rel="noreferrer">{m.title} ↗</a>)}
+        {s.tools?.map(t => <a key={t.name} className="pill acc" href={t.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }} title={t.use}>{t.name} ↗</a>)}
+      </div>}
       <div className="card pad-lg">
         <div className="tabs">{tabs.map(([k, l]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}</div>
         <div style={{ marginTop: 18 }}>
@@ -46,6 +54,7 @@ export default function SessionPage() {
           {tab === "lens" && <Lens s={s} />}
           {tab === "quiz" && <Quiz s={s} p={p} save={save} toast={toast} />}
           {tab === "submit" && <Submit s={s} subs={subs} reload={data.reload} toast={toast} />}
+          {tab === "resources" && <Resources s={s} mats={mats} />}
         </div>
       </div>
     </div>
@@ -125,6 +134,18 @@ function Submit({ s, subs, reload, toast }: { s: Session; subs: Submission[]; re
             </div>
             <button className="btn ghost xs" onClick={async () => { await store.deleteSubmission(x.id); await reload(); }}>Remove</button>
           </div>))}</div>}
+    </div>
+  );
+}
+
+function Resources({ s, mats }: { s: Session; mats: Material[] }) {
+  return (
+    <div className="reading stack" style={{ gap: 18 }}>
+      <div><span className="eyebrow">Materials</span>
+        <div className="stack" style={{ gap: 8, marginTop: 8 }}>{mats.map(m => <a key={m.id} className="sub" href={m.url || "#"} target="_blank" rel="noreferrer" style={{ textDecoration: "none", color: "inherit" }}><div><b>{m.title}</b><div className="small muted">{m.kind === "student_guide" ? "Download and keep. Everything from today in one document." : m.kind === "slides" ? "Today's slides" : m.kind === "lab_deck" ? "The lab deck" : "Resource"}</div></div><span className="pill acc">{m.file_path ? "Download" : "Open"}</span></a>)}{!mats.length && <div className="small muted">Materials for this session will appear here before class.</div>}</div></div>
+      <div><span className="eyebrow">Tools used today</span>
+        <p className="small muted" style={{ margin: "4px 0 8px" }}>Open each one before the lab starts. All are free with no credit card.</p>
+        <div className="stack" style={{ gap: 8 }}>{(s.tools || []).map(t => <div key={t.name} className="term" style={{ gridTemplateColumns: "minmax(120px,160px) minmax(0,1fr)" }}><a href={t.url} target="_blank" rel="noreferrer" style={{ fontFamily: "var(--mono)", fontSize: ".85rem" }}>{t.name} ↗</a><div>{t.use}<div className="exam">Free tier: {t.free}</div></div></div>)}</div></div>
     </div>
   );
 }

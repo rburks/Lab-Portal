@@ -230,3 +230,53 @@ create policy "flashcards instructor read" on public.flashcards for select to au
 
 -- Added October 6 (guided labs): per-step checkpoint answers. Safe to re-run.
 alter table public.progress add column if not exists responses jsonb not null default '{}';
+
+-- ===================== Added October 6 (content in DB, materials, verification, attendance) =====================
+
+-- Session content lives here, not in code. One row per session id (w01d1 ...). content is the session JSON.
+create table if not exists public.session_content (
+  session_id text primary key,
+  content jsonb not null,
+  version_note text,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references public.profiles(id),
+  verified_at timestamptz,
+  verified_by uuid references public.profiles(id),
+  verification jsonb            -- { checks: {tools:true, links:true, facts:true, quiz:true, guide:true}, note: "" }
+);
+
+-- Materials per session: uploaded files (student guide) or links (slides, lab deck).
+create table if not exists public.session_materials (
+  id bigserial primary key,
+  session_id text not null,
+  kind text not null check (kind in ('student_guide','slides','lab_deck','other')),
+  title text not null,
+  file_path text,
+  url text,
+  created_at timestamptz not null default now()
+);
+
+-- Attendance per student per session.
+create table if not exists public.attendance (
+  student_id uuid not null references public.profiles(id) on delete cascade,
+  session_id text not null,
+  status text not null check (status in ('present','late','absent')),
+  marked_at timestamptz not null default now(),
+  primary key (student_id, session_id)
+);
+
+alter table public.session_content enable row level security;
+alter table public.session_materials enable row level security;
+alter table public.attendance enable row level security;
+create policy "content read" on public.session_content for select to authenticated using (true);
+create policy "content instructor" on public.session_content for all to authenticated using (public.is_instructor()) with check (public.is_instructor());
+create policy "materials read" on public.session_materials for select to authenticated using (true);
+create policy "materials instructor" on public.session_materials for all to authenticated using (public.is_instructor()) with check (public.is_instructor());
+create policy "attendance own read" on public.attendance for select to authenticated using (student_id = auth.uid());
+create policy "attendance instructor" on public.attendance for all to authenticated using (public.is_instructor()) with check (public.is_instructor());
+
+-- Public-read bucket for materials (student guides). Only instructors write.
+insert into storage.buckets (id, name, public) values ('materials','materials', true) on conflict (id) do nothing;
+create policy "materials upload instructor" on storage.objects for insert to authenticated with check (bucket_id = 'materials' and public.is_instructor());
+create policy "materials delete instructor" on storage.objects for delete to authenticated using (bucket_id = 'materials' and public.is_instructor());
+create policy "materials read all" on storage.objects for select to authenticated using (bucket_id = 'materials');

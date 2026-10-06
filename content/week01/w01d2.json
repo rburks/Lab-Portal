@@ -1,0 +1,259 @@
+{
+  "sandbox": "classifier",
+  "goal": "Decide what two things your classifier will tell apart. Pick something you can photograph right now (two kinds of objects on your desk work well).",
+  "steps": [
+    {
+      "label": "Try the sandbox first",
+      "why": "See the idea before you touch the tool: a classifier is just a line that separates two groups.",
+      "do": [
+        "Open the Sandbox tab above.",
+        "Drag the line until it separates blue dots from orange dots. Watch Training accuracy climb.",
+        "Click 'Skewed sample'. Notice how many different lines separate it perfectly.",
+        "Click 'New data (test)'. Watch what happens to a line that looked perfect on skewed data.",
+        "Click 'Record my result'."
+      ],
+      "see": "Training accuracy above 90% on the fair sample, and a visible drop when a skewed fit meets new data.",
+      "checkpoint": {
+        "kind": "choice",
+        "prompt": "A line fit on the skewed sample scored 100% in training and much lower on new data. What's the lesson?",
+        "options": [
+          "The test data was wrong",
+          "A model can look perfect on data that never showed it the hard cases",
+          "You need more lines",
+          "Accuracy doesn't matter"
+        ],
+        "correct": 1,
+        "why": "The skewed sample hid the hard cases near the boundary, so any line looked perfect. Real data exposed the gap. That's overfitting to a bad sample."
+      }
+    },
+    {
+      "label": "Label photos with a partner",
+      "why": "Labels are human decisions. You're about to find out how fuzzy they are.",
+      "do": [
+        "Pair up. Your instructor will share a folder of 20 photos.",
+        "Without talking, each of you writes a label for every photo (for example 'formal' or 'casual').",
+        "Compare lists. Count how many you disagreed on."
+      ],
+      "see": "Two lists of 20 labels and a disagreement count.",
+      "checkpoint": {
+        "kind": "text",
+        "prompt": "How many of 20 did you disagree on, and give one example",
+        "placeholder": "Example: 4. We disagreed on photo 7; I said casual, she said formal because of the shoes.",
+        "minLength": 15
+      }
+    },
+    {
+      "label": "Open Teachable Machine",
+      "why": "This is a real training tool, used the way you'll see in the lab.",
+      "do": [
+        "Go to teachablemachine.withgoogle.com and click Get Started.",
+        "Choose Image Project, then Standard image model.",
+        "Rename Class 1 and Class 2 to your two objects (for example 'Mug' and 'Phone')."
+      ],
+      "see": "Two class boxes with your names on them, each with a Webcam button, and a Train Model button in the middle.",
+      "tip": "If the webcam button is grey, your browser blocked the camera. Click the lock icon in the address bar and allow Camera.",
+      "checkpoint": {
+        "kind": "confirm",
+        "prompt": "I see two named class boxes and a Train Model button."
+      }
+    },
+    {
+      "label": "Collect varied photos",
+      "why": "Variety in the training data is what makes a model work on new data.",
+      "do": [
+        "Click Webcam under your first class. Hold the object up and press and hold 'Hold to Record' while slowly turning it. Aim for 20 to 30 samples.",
+        "Move to a different spot in the room, change the angle, change the background, and record more.",
+        "Repeat for the second class."
+      ],
+      "see": "A strip of thumbnails under each class, and the thumbnails don't all look alike.",
+      "checkpoint": {
+        "kind": "choice",
+        "prompt": "Why move around the room while recording?",
+        "options": [
+          "The camera needs to warm up",
+          "So the model learns the object, not the background or lighting",
+          "To get more total photos",
+          "It doesn't matter"
+        ],
+        "correct": 1,
+        "why": "If every photo of one class has the same background, the model can learn the background as the shortcut. Variety forces it to learn the object."
+      }
+    },
+    {
+      "label": "Train and test",
+      "do": [
+        "Click Train Model. Wait for it to finish (under a minute).",
+        "In the Preview panel, hold up each object. Watch the confidence bars.",
+        "Now hold up something that isn't either object. Watch what it does."
+      ],
+      "see": "Confidence bars that swing toward the right class for your objects. For the unknown object, it still picks one; it has no 'neither' option.",
+      "checkpoint": {
+        "kind": "text",
+        "prompt": "What did the model say when you showed it an object that was neither class?",
+        "placeholder": "Example: It said 85% Mug for my water bottle.",
+        "minLength": 10
+      }
+    },
+    {
+      "label": "Break it on purpose with skewed data",
+      "why": "Seeing a model fail is the fastest way to understand what it learned.",
+      "do": [
+        "Click the three dots on your first class and choose Delete all samples.",
+        "Re-record it in ONE spot only: same background, same lighting, same angle.",
+        "Train again. Then test that object from a different spot in the room."
+      ],
+      "see": "Confidence collapses or flips when you move. The model learned the spot, not the object.",
+      "checkpoint": {
+        "kind": "text",
+        "prompt": "Write one sentence explaining the failure. Name the shortcut the model learned.",
+        "placeholder": "Example: It learned 'brown desk' means mug because every mug photo had the desk behind it.",
+        "minLength": 20
+      }
+    },
+    {
+      "label": "Add a third class and five edge cases",
+      "do": [
+        "Click Add a class. Name it and record varied samples.",
+        "Train. Then test five edge cases: odd angle, partly hidden, far away, a lookalike object, a drawing of the object.",
+        "Note which ones fool it."
+      ],
+      "see": "At least one edge case gets the wrong answer.",
+      "checkpoint": {
+        "kind": "text",
+        "prompt": "Which edge cases fooled it?",
+        "placeholder": "Example: Far away and the drawing both got labeled as the phone.",
+        "minLength": 10
+      }
+    },
+    {
+      "label": "Fill in your data sheet",
+      "why": "Real teams document what a model saw and didn't see. You're doing the same.",
+      "do": [
+        "Answer four things: What data did your model see? What did it never see? Three inputs that would fool it. What data would fix each?",
+        "Keep it to a few lines each."
+      ],
+      "see": "Four short answers.",
+      "checkpoint": {
+        "kind": "text",
+        "prompt": "Your data sheet",
+        "placeholder": "Saw: ...\nNever saw: ...\nWould fool it: ...\nFix: ...",
+        "minLength": 60
+      }
+    },
+    {
+      "label": "Upload a screenshot",
+      "do": [
+        "Take a screenshot of Teachable Machine showing your three classes and the Preview panel with a prediction.",
+        "Upload it below."
+      ],
+      "see": "A thumbnail in the submissions list.",
+      "checkpoint": {
+        "kind": "upload",
+        "prompt": "Screenshot of your trained model"
+      }
+    }
+  ],
+  "stretch": [
+    "Collect a balanced retraining set and prove the five edge cases pass",
+    "Sort four scenarios into real-time, serverless, asynchronous, or batch inference"
+  ],
+  "doneWhen": [
+    "A trained model with three classes",
+    "A written failure sentence and a completed data sheet",
+    "Screenshot submitted"
+  ],
+  "submission": {
+    "prompt": "Upload a screenshot of your trained model's preview.",
+    "kinds": [
+      "image",
+      "text"
+    ]
+  },
+  "lens": [
+    {
+      "term": "Supervised learning",
+      "plain": "Learning from examples that come with the right answer attached.",
+      "exam": "Domain 1: supervised vs unsupervised vs reinforcement learning."
+    },
+    {
+      "term": "Training vs inference",
+      "plain": "Training is learning from data. Inference is using what was learned on new data.",
+      "exam": "Domain 1: training and inference; real-time, serverless, asynchronous, and batch inference on AWS."
+    },
+    {
+      "term": "Overfitting",
+      "plain": "Memorizing the training examples instead of learning the pattern, so new data fails.",
+      "exam": "Domain 1: overfitting and underfitting."
+    },
+    {
+      "term": "Labeled data",
+      "plain": "Data where a human has already marked the correct answer.",
+      "exam": "Domain 1: labeled vs unlabeled, structured vs unstructured data."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "Your classifier learned that 'mug' means 'brown background' because every mug photo had one. This is an example of:",
+      "a": [
+        "Underfitting",
+        "A shortcut learned from skewed training data",
+        "Reinforcement learning",
+        "Too much data"
+      ],
+      "c": 1,
+      "why": "The model found the easiest pattern that separated the classes. That pattern was the background, not the object."
+    },
+    {
+      "q": "Which type of learning uses examples that already have the correct answer attached?",
+      "a": [
+        "Unsupervised",
+        "Reinforcement",
+        "Supervised",
+        "Generative"
+      ],
+      "c": 2,
+      "why": "Supervised learning trains on labeled examples. Unsupervised finds groups without labels."
+    },
+    {
+      "q": "A model scores 99% on its training photos and 60% on new photos. What's the most likely problem?",
+      "a": [
+        "The new photos are broken",
+        "Overfitting",
+        "The model needs a bigger GPU",
+        "Underfitting"
+      ],
+      "c": 1,
+      "why": "A big gap between training and new data is the signature of overfitting."
+    },
+    {
+      "q": "Two people label the same photos and disagree on 4 of 20. What does this tell you?",
+      "a": [
+        "One person is wrong",
+        "Labels are human decisions, and the model learns whatever decisions it's given",
+        "The photos are low quality",
+        "You need fewer labels"
+      ],
+      "c": 1,
+      "why": "Labels encode judgment. If the labelers disagree, the model inherits that fuzziness."
+    },
+    {
+      "q": "A bank wants fraud scores the instant a card is swiped. Which inference style fits?",
+      "a": [
+        "Batch",
+        "Asynchronous",
+        "Real-time",
+        "Weekly"
+      ],
+      "c": 2,
+      "why": "Real-time inference returns an answer immediately. Batch runs on a schedule over many records."
+    }
+  ],
+  "tools": [
+    {
+      "name": "Teachable Machine",
+      "url": "https://teachablemachine.withgoogle.com",
+      "use": "Train your image classifier",
+      "free": "Free, no account needed."
+    }
+  ]
+}

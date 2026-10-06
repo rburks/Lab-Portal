@@ -1,8 +1,12 @@
 // Data layer. One interface, two implementations: Supabase (production) and Demo (in-memory, no backend).
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { SESSIONS } from "../content/course";
-import type { Announcement, CalendarDay, CourseSettings, Flashcard, Message, OHRequest, Slot, StoreExt } from "./types-ext";
-export type { Announcement, CalendarDay, CourseSettings, Flashcard, Message, OHRequest, Slot } from "./types-ext";
+import { SESSIONS, type Session } from "../content/course";
+import type { Announcement, Attendance, CalendarDay, ContentRow, CourseSettings, Flashcard, Material, Message, OHRequest, Slot, StoreContent, StoreExt } from "./types-ext";
+import type { SessionContent } from "../content/course";
+import w01d1 from "../../content/week01/w01d1.json";
+import w01d2 from "../../content/week01/w01d2.json";
+import w01d3 from "../../content/week01/w01d3.json";
+export type { Announcement, Attendance, CalendarDay, ContentRow, CourseSettings, Flashcard, Material, Message, OHRequest, Slot } from "./types-ext";
 
 export type Role = "student" | "instructor";
 export type Profile = { id: string; email: string; full_name: string; role: Role; created_at: string };
@@ -11,7 +15,7 @@ export type Submission = { id: number; student_id: string; session_id: string; k
 export type Grade = { student_id: string; session_id: string; score: number | null; feedback: string | null; graded_at: string };
 export type Release = { session_id: string; student_id: string | null; unlocked_at: string };
 
-export interface Store extends StoreExt {
+export interface Store extends StoreExt, StoreContent {
   demo: boolean;
   // auth
   currentUser(): Promise<Profile | null>;
@@ -122,6 +126,19 @@ class SupaStore implements Store {
   async deleteAnnouncement(id: number) { await this.sb.from("announcements").delete().eq("id", id); }
   async flashcards() { const { data } = await this.sb.from("flashcards").select("term_key,status"); return (data || []) as Flashcard[]; }
   async setFlashcard(term_key: string, status: "known" | "review" | null) { const { data: { user } } = await this.sb.auth.getUser(); if (!user) return; if (!status) await this.sb.from("flashcards").delete().eq("student_id", user.id).eq("term_key", term_key); else await this.sb.from("flashcards").upsert({ student_id: user.id, term_key, status, updated_at: new Date().toISOString() }, { onConflict: "student_id,term_key" }); }
+  // ----- content, materials, attendance -----
+  async allContent() { const { data } = await this.sb.from("session_content").select("session_id,content,version_note,updated_at,verified_at,verification"); return (data || []) as ContentRow[]; }
+  async saveContent(session_id: string, content: SessionContent, version_note: string) { const { data: { user } } = await this.sb.auth.getUser(); const { error } = await this.sb.from("session_content").upsert({ session_id, content, version_note, updated_at: new Date().toISOString(), updated_by: user?.id, verified_at: null, verification: null }, { onConflict: "session_id" }); if (error) throw error; }
+  async setVerification(session_id: string, v: { checks: Record<string, boolean>; note: string }) { const { data: { user } } = await this.sb.auth.getUser(); await this.sb.from("session_content").update({ verified_at: new Date().toISOString(), verified_by: user?.id, verification: v }).eq("session_id", session_id); }
+  async materials() { const { data } = await this.sb.from("session_materials").select("*").order("created_at"); return ((data || []) as Material[]).map(m => ({ ...m, url: m.file_path ? this.sb.storage.from("materials").getPublicUrl(m.file_path).data.publicUrl : m.url })); }
+  async addMaterial(m: { session_id: string; kind: Material["kind"]; title: string; file?: File; url?: string }) {
+    let file_path: string | null = null;
+    if (m.file) { const ext = m.file.name.split(".").pop() || "bin"; file_path = `${m.session_id}/${m.kind}-${Date.now()}.${ext}`; const { error } = await this.sb.storage.from("materials").upload(file_path, m.file, { contentType: m.file.type || undefined }); if (error) throw error; }
+    const { error } = await this.sb.from("session_materials").insert({ session_id: m.session_id, kind: m.kind, title: m.title, file_path, url: m.url ?? null }); if (error) throw error;
+  }
+  async deleteMaterial(id: number) { const { data } = await this.sb.from("session_materials").select("file_path").eq("id", id).single(); if (data?.file_path) await this.sb.storage.from("materials").remove([data.file_path]); await this.sb.from("session_materials").delete().eq("id", id); }
+  async attendance() { const { data } = await this.sb.from("attendance").select("student_id,session_id,status"); return (data || []) as Attendance[]; }
+  async setAttendance(student_id: string, session_id: string, status: Attendance["status"] | null) { if (!status) await this.sb.from("attendance").delete().eq("student_id", student_id).eq("session_id", session_id); else await this.sb.from("attendance").upsert({ student_id, session_id, status, marked_at: new Date().toISOString() }, { onConflict: "student_id,session_id" }); }
   private async withUrls(rows: Submission[]): Promise<Submission[]> {
     const paths = rows.filter(r => r.file_path).map(r => r.file_path!);
     if (!paths.length) return rows;
@@ -139,7 +156,8 @@ function seedDemo() {
   const progress: Progress[] = []; const grades: Grade[] = []; const submissions: Submission[] = [];
   const rnd = (seed: number) => { let x = seed; return () => { x = (x * 9301 + 49297) % 233280; return x / 233280; }; };
   const R = rnd(42);
-  const built = SESSIONS.filter(s => s.built);
+  const SEED: Record<string, { steps?: unknown[]; sandbox?: string }> = { w01d1: w01d1 as never, w01d2: w01d2 as never, w01d3: w01d3 as never };
+  const built = SESSIONS.filter(s => SEED[s.id]).map(s => ({ ...s, steps: (SEED[s.id].steps || []) as unknown as Session["steps"], sandbox: SEED[s.id].sandbox as Session["sandbox"] }));
   DEMO_NAMES.forEach((_, i) => {
     const uid = `u${i + 1}`;
     const ability = i === 1 || i === 7 ? 0.35 : i === 3 ? 0.5 : 0.8 + R() * 0.2; // two struggling, one middling
@@ -164,7 +182,10 @@ function seedDemo() {
   const msgs: Message[] = [{ id: 1, thread_student_id: "u2", sender_id: "u2", body: "Hi Roland, my Teachable Machine model keeps saying 'mug' for everything. I retrained twice.", created_at: new Date(Date.now() - 3600e3 * 20).toISOString(), read_at: null }, { id: 2, thread_student_id: "u1", sender_id: "u1", body: "Is it okay to use my work's actual sales sheet for the Week 6 lab, or should I use the Bloom & Vine one?", created_at: new Date(Date.now() - 3600e3 * 5).toISOString(), read_at: null }, { id: 3, thread_student_id: "u1", sender_id: "u-instr", body: "Use Bloom & Vine in class so we're all looking at the same numbers. Your own sheet is a great Stretch though.", created_at: new Date(Date.now() - 3600e3 * 4).toISOString(), read_at: null }];
   const anns: Announcement[] = [{ id: 1, title: "Welcome to Software/AI", body: "Before Thursday: make sure you have a Google account and a laptop you can install software on. Bring one task from your job or target job that you'd like AI to help with.", pinned: true, created_at: new Date(Date.now() - 86400e3 * 2).toISOString() }, { id: 2, title: "Office hours are open", body: "Tuesdays 5 to 5:45 PM on Zoom and Thursdays 5:30 PM in the classroom. Book from the Calendar page.", pinned: false, created_at: new Date(Date.now() - 86400e3).toISOString() }];
   const flashcards: Flashcard[] = [{ term_key: "w01d1|Generative AI", status: "known" }, { term_key: "w01d1|Agentic AI", status: "review" }];
-  return { settings, calendar, slots, oh, msgs, anns, flashcards, profiles, progress, grades, submissions, releases, roster: profiles.map(p => ({ email: p.email, full_name: p.full_name as string | null, role: p.role })) };
+  const content: ContentRow[] = [["w01d1", w01d1], ["w01d2", w01d2], ["w01d3", w01d3]].map(([id, c], i) => ({ session_id: id as string, content: c as unknown as SessionContent, version_note: "Built Oct 6, 2026", updated_at: new Date(Date.now() - 86400e3).toISOString(), verified_at: i === 0 ? new Date().toISOString() : i === 1 ? new Date(Date.now() - 86400e3 * 4).toISOString() : null, verification: i < 2 ? { checks: { tools: true, links: true, facts: true, quiz: true, guide: true }, note: "Free tiers confirmed on vendor pricing pages." } : null }));
+  const materials: Material[] = [{ id: 1, session_id: "w01d1", kind: "student_guide", title: "Week 1 Day 1 Student Guide", file_path: null, url: "#", created_at: new Date().toISOString() }, { id: 2, session_id: "w01d1", kind: "slides", title: "Slides (Gamma)", file_path: null, url: "https://gamma.app", created_at: new Date().toISOString() }];
+  const attendance: Attendance[] = [];
+  return { content, materials, attendance, settings, calendar, slots, oh, msgs, anns, flashcards, profiles, progress, grades, submissions, releases, roster: profiles.map(p => ({ email: p.email, full_name: p.full_name as string | null, role: p.role })) };
 }
 
 class DemoStore implements Store {
@@ -227,6 +248,14 @@ class DemoStore implements Store {
   async deleteAnnouncement(id: number) { this.d.anns = this.d.anns.filter(a => a.id !== id); }
   async flashcards() { return this.me === "u1" ? this.d.flashcards : []; }
   async setFlashcard(term_key: string, status: "known" | "review" | null) { this.d.flashcards = this.d.flashcards.filter(f => f.term_key !== term_key); if (status) this.d.flashcards.push({ term_key, status }); }
+  async allContent() { return this.d.content; }
+  async saveContent(session_id: string, content: SessionContent, version_note: string) { this.d.content = this.d.content.filter(c => c.session_id !== session_id); this.d.content.push({ session_id, content, version_note, updated_at: new Date().toISOString(), verified_at: null, verification: null }); }
+  async setVerification(session_id: string, v: { checks: Record<string, boolean>; note: string }) { const c = this.d.content.find(x => x.session_id === session_id); if (c) { c.verified_at = new Date().toISOString(); c.verification = v; } }
+  async materials() { return this.d.materials; }
+  async addMaterial(m: { session_id: string; kind: Material["kind"]; title: string; file?: File; url?: string }) { this.d.materials.push({ id: Date.now(), session_id: m.session_id, kind: m.kind, title: m.title, file_path: m.file ? "demo" : null, url: m.file ? URL.createObjectURL(m.file) : (m.url ?? null), created_at: new Date().toISOString() }); }
+  async deleteMaterial(id: number) { this.d.materials = this.d.materials.filter(m => m.id !== id); }
+  async attendance() { return this.d.attendance; }
+  async setAttendance(student_id: string, session_id: string, status: Attendance["status"] | null) { this.d.attendance = this.d.attendance.filter(a => !(a.student_id === student_id && a.session_id === session_id)); if (status) this.d.attendance.push({ student_id, session_id, status }); }
   async signedUrl() { return ""; }
 }
 

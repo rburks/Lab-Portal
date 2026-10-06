@@ -11,11 +11,11 @@ export default function GuidedLab({ s, p, subs, save, reload, toast, onGoTo }: P
   const steps = s.steps || [];
   const done = (p?.steps || []).map(Boolean);
   const firstOpen = Math.max(0, done.findIndex((d, i) => !d && i < steps.length));
-  const [cur, setCur] = useState(() => (done.every(Boolean) && steps.length ? steps.length : (firstOpen === -1 ? 0 : firstOpen)));
+  const [cur, setCur] = useState(() => (steps.length && done.length >= steps.length && done.slice(0, steps.length).every(Boolean) ? steps.length : (firstOpen === -1 ? 0 : firstOpen)));
   const responses = (p?.responses || {}) as Record<string, unknown>;
   const [goal, setGoal] = useState(p?.goal || "");
   useEffect(() => setGoal(p?.goal || ""), [p?.goal]);
-  const completed = done.filter(Boolean).length;
+  const completed = done.slice(0, steps.length).filter(Boolean).length;
   const allDone = steps.length > 0 && completed >= steps.length;
 
   const markDone = async (i: number) => {

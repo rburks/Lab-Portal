@@ -27,6 +27,8 @@ function Shell() {
             <NavLink to="/instructor" end>Dashboard</NavLink>
             <NavLink to="/instructor/grid">Progress grid</NavLink>
             <NavLink to="/instructor/release">Unlock</NavLink>
+            <NavLink to="/instructor/content">Content</NavLink>
+            <NavLink to="/instructor/attendance">Attendance</NavLink>
             <NavLink to="/instructor/roster">Roster</NavLink>
             <NavLink to="/calendar">Calendar</NavLink>
             <NavLink to="/messages">Messages<Unread /></NavLink>

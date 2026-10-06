@@ -1,6 +1,6 @@
 // Shared helpers: lock logic, progress math, performance insights, image compression, CSV.
 import { SESSIONS, type Session } from "../content/course";
-import type { Grade, Profile, Progress, Release, Submission } from "./store";
+import type { Attendance, Grade, Profile, Progress, Release, Submission } from "./store";
 
 export function isUnlocked(sessionId: string, studentId: string | null, releases: Release[]) {
   return releases.some(r => r.session_id === sessionId && (r.student_id === null || r.student_id === studentId));
@@ -31,9 +31,9 @@ export function labPct(s: Session, p?: Progress) {
 // ----- performance insights -----
 export type StudentStat = {
   profile: Profile; labAvg: number; quizAvg: number | null; gradeAvg: number | null; submitted: number; graded: number;
-  openSessions: number; lastActive: string | null; daysSinceActive: number | null; composite: number; flags: string[];
+  openSessions: number; lastActive: string | null; daysSinceActive: number | null; composite: number; flags: string[]; absences: number;
 };
-export function computeStats(profiles: Profile[], progress: Progress[], subs: Submission[], grades: Grade[], releases: Release[]): StudentStat[] {
+export function computeStats(profiles: Profile[], progress: Progress[], subs: Submission[], grades: Grade[], releases: Release[], attendance: Attendance[] = []): StudentStat[] {
   const students = profiles.filter(p => p.role === "student");
   const built = SESSIONS.filter(s => s.built);
   return students.map(profile => {
@@ -59,7 +59,9 @@ export function computeStats(profiles: Profile[], progress: Progress[], subs: Su
     if (gradeAvg != null && gradeAvg < 70) flags.push("Graded work below 70");
     if (daysSinceActive != null && daysSinceActive >= 7) flags.push(`No activity for ${daysSinceActive} days`);
     if (open.length && lastActive === null) flags.push("Hasn't started");
-    return { profile, labAvg, quizAvg, gradeAvg, submitted, graded: gs.length, openSessions: open.length, lastActive, daysSinceActive, composite, flags };
+    const absences = attendance.filter(a => a.student_id === profile.id && a.status === "absent").length;
+    if (absences >= 2) flags.push(`Missed ${absences} sessions`);
+    return { profile, labAvg, quizAvg, gradeAvg, submitted, graded: gs.length, openSessions: open.length, lastActive, daysSinceActive, composite, flags, absences };
   });
 }
 

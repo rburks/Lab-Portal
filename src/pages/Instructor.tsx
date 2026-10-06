@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { SESSIONS, WEEKS, type Session } from "../content/course";
 import { useAuth } from "../auth";
-import { store, type Grade, type Profile, type Progress, type Release, type Submission } from "../lib/store";
+import { store, type Attendance, type ContentRow, type Grade, type Profile, type Progress, type Release, type Submission } from "../lib/store";
+import { ContentPage, AttendancePage } from "./ContentPage";
 import { computeStats, download, fmtDate, initials, isUnlocked, labPct, sessionState, STATE_LABEL, toCSV, type SessionState, type StudentStat } from "../lib/logic";
 
-type Data = { profiles: Profile[]; progress: Progress[]; subs: Submission[]; grades: Grade[]; releases: Release[] };
+type Data = { profiles: Profile[]; progress: Progress[]; subs: Submission[]; grades: Grade[]; releases: Release[]; attendance: Attendance[]; content: ContentRow[] };
 function useInstructorData() {
   const [d, setD] = useState<Data | null>(null);
-  const reload = useCallback(async () => { const [profiles, progress, subs, grades, releases] = await Promise.all([store.allProfiles(), store.allProgress(), store.allSubmissions(), store.allGrades(), store.releases()]); setD({ profiles, progress, subs, grades, releases }); }, []);
+  const reload = useCallback(async () => { const [profiles, progress, subs, grades, releases, attendance, content] = await Promise.all([store.allProfiles(), store.allProgress(), store.allSubmissions(), store.allGrades(), store.releases(), store.attendance(), store.allContent()]); setD({ profiles, progress, subs, grades, releases, attendance, content }); }, []);
   useEffect(() => { reload(); }, [reload]);
   return { d, reload };
 }
@@ -26,6 +27,8 @@ export default function Instructor() {
         <Route path="grid" element={<Grid d={d} reload={reload} />} />
         <Route path="release" element={<ReleasePanel d={d} reload={reload} />} />
         <Route path="roster" element={<Roster d={d} reload={reload} />} />
+        <Route path="content" element={<ContentPage />} />
+        <Route path="attendance" element={<AttendancePage />} />
       </Routes>
     </>
   );
@@ -33,7 +36,7 @@ export default function Instructor() {
 
 // ---------- Overview: KPIs, top performers, needs attention, grading queue ----------
 function Overview({ d }: { d: Data }) {
-  const stats = useMemo(() => computeStats(d.profiles, d.progress, d.subs, d.grades, d.releases), [d]);
+  const stats = useMemo(() => computeStats(d.profiles, d.progress, d.subs, d.grades, d.releases, d.attendance), [d]);
   const top = [...stats].filter(s => s.openSessions > 0).sort((a, b) => b.composite - a.composite).slice(0, 5);
   const struggling = stats.filter(s => s.flags.length).sort((a, b) => b.flags.length - a.flags.length || a.composite - b.composite);
   const ungraded = d.subs.filter(s => !d.grades.some(g => g.student_id === s.student_id && g.session_id === s.session_id && g.score != null));
@@ -48,6 +51,7 @@ function Overview({ d }: { d: Data }) {
         <div className="kpi"><span className="eyebrow">Class lab completion</span><div className="v">{classLab}%</div><div className="small muted">average across open sessions</div></div>
         <div className="kpi"><span className="eyebrow">Class quiz average</span><div className="v">{classQuiz == null ? "—" : classQuiz + "%"}</div><div className="small muted">best score per student per session</div></div>
         <div className="kpi"><span className="eyebrow">Active this week</span><div className="v">{active7}<span className="muted" style={{ fontSize: "1rem" }}> / {stats.length}</span></div><div className="small muted">students with activity in 7 days</div></div>
+        <div className="kpi"><span className="eyebrow">Content verified</span><div className="v">{d.content.filter(c => c.verified_at && c.verified_at >= c.updated_at).length}<span className="muted" style={{ fontSize: "1rem" }}> / {d.content.length}</span></div><div className="small muted">imported sessions with a current check</div></div>
         <div className="kpi"><span className="eyebrow">Waiting for grading</span><div className="v">{ungradedPairs}</div><div className="small muted">submitted labs without a score</div></div>
       </div>
       <div className="insights">
@@ -90,7 +94,7 @@ function Grid({ d, reload }: { d: Data; reload: () => Promise<void> }) {
   const [flag, setFlag] = useState<string>("any");
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [sel, setSel] = useState<Cell | null>(null);
-  const stats = useMemo(() => computeStats(d.profiles, d.progress, d.subs, d.grades, d.releases), [d]);
+  const stats = useMemo(() => computeStats(d.profiles, d.progress, d.subs, d.grades, d.releases, d.attendance), [d]);
   const students = d.profiles.filter(p => p.role === "student");
   const openWeeks = WEEKS.filter(w => SESSIONS.some(s => s.week === w.n && d.releases.some(r => r.session_id === s.id)));
   const weeks = week === "open" ? openWeeks : week === "all" ? WEEKS : WEEKS.filter(w => w.n === +week);
@@ -204,7 +208,7 @@ function ReleasePanel({ d, reload }: { d: Data; reload: () => Promise<void> }) {
         <div className="week" key={w.n}>
           <div className="week-h"><div><div className="n">WEEK {String(w.n).padStart(2, "0")}</div><h4>{w.theme}</h4></div><button className={`btn xs ${allOn ? "ghost" : ""}`} onClick={() => toggleWeek(w.n, !allOn)}>{allOn ? "Lock week" : "Unlock week"}</button></div>
           {days.map(s => { const on = forStudent(s.id); const g = sidv && globally(s.id); return (
-            <div className="release-row" key={s.id}><div style={{ minWidth: 0 }}><div className="small" style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.title}>Day {s.day} · {s.title}</div><div className="small muted">{!s.built ? "Content not built yet" : g ? "Open for the whole class" : on ? "Open" : "Locked"}</div></div>
+            <div className="release-row" key={s.id}><div style={{ minWidth: 0 }}><div className="small" style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.title}>Day {s.day} · {s.title}</div><div className="small muted">{!s.built ? "No content imported" : (() => { const c = d.content.find(x => x.session_id === s.id); const v = c?.verified_at && c.verified_at >= c.updated_at; return <>{g ? "Open for the whole class" : on ? "Open" : "Locked"}{!v && <span className="pill warn" style={{ marginLeft: 6 }}>Not verified</span>}</>; })()}</div></div>
               <button className={`btn xs ${on ? "ghost" : ""}`} onClick={() => toggle(s.id, !on)} disabled={!!g}>{on ? "Lock" : "Unlock"}</button></div>); })}
         </div>); })}</div>
     </div>

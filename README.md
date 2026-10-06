@@ -46,19 +46,34 @@ Open the local URL. With no `.env` file the app runs in demo mode with 12 exampl
 - Unlock the day's session (whole class, or one student at a time).
 - The Supabase free project pauses after 7 days with no activity. Over a long break, open the Supabase dashboard the day before class and click **Restore** if it's paused. Class three nights a week keeps it awake otherwise.
 
-## Adding session content
+## Updating an existing deployment
 
-All course content lives in `src/content/course.ts`. Week 1 is fully built; the other 57 sessions are shells with titles. To build a session, add its entry to the `W1`-style map (rename it as you go) with `goal`, `steps`, `stretch`, `doneWhen`, `lens`, `quiz`, and optionally `sandbox` and `submission`. The session becomes `built: true` automatically and shows its tabs. Unbuilt sessions show a "being built" notice when unlocked.
+Push to `main` and Netlify redeploys. If the schema changed (check the bottom of `supabase/schema.sql` for dated sections), paste that dated section into the Supabase SQL editor and run it. All sections are safe to re-run.
 
-Sandboxes are React components in `src/components/`. Add a new one, give it a key in the `Session.sandbox` union, and render it in `SessionPage.tsx`.
+October 6 additions: `calendar_days`, `office_hour_slots`, `office_hour_requests`, `messages`, `announcements`, `flashcards`, `course_settings`, a `responses` column on `progress`, and (second batch) `session_content`, `session_materials`, `attendance`, plus a public `materials` storage bucket.
 
-## Calendar, office hours, messages, study guide
+## Guided labs
 
-- **Calendar.** The schedule is generated from the start date (Oct 12, 2026) and class days (Mon, Tue, Thu). Add a **holiday** or **buffer** day on a class date and every later session shifts back one class day; the end date updates. Remove it to pull them forward. Change the start date or class days in the `course_settings` table.
-- **Office hours.** Define recurring slots (day, start, length, capacity, location). Students book one of the next three dates for a slot, or propose any date and time, always with a topic. You accept, decline with an optional note, or mark done.
-- **Messages.** Each student has one private thread with the instructor. The nav badge shows unread counts. Threads refresh every 20 seconds; there is no email notification yet (that needs a Supabase Edge Function plus an email provider; ask and I'll add it).
-- **Announcements.** Class-wide posts, optionally pinned. The two most recent show at the top of every student's course page.
-- **Exam study guide.** Built automatically from the Exam Lens terms and quiz questions of every unlocked session. Domain map shows the five AIF-C01 domains with weights, which sessions covered each, the student's quiz average per domain, and a "focus first" callout. Flashcards flip, with "Got it" and "Still fuzzy" piles saved per student. Practice pulls shuffled questions across covered sessions and reports a round score against the 70% passing line.
+Each lab is a sequence of steps. A step has a short title, one line on why it matters, numbered instructions written for someone who has never opened the tool, a "what you should see" box, an optional "if it didn't work" tip, and a checkpoint. Checkpoint kinds: `text` (student types an answer, optional minimum length), `choice` (a quick check with instant feedback; the right answer unlocks the step), `upload` (screenshot or link), `confirm` (a specific observation to tick). Steps unlock in order. Every typed answer is saved to `progress.responses` and shows in the instructor's grading drawer.
+
+## Session content: the weekly workflow (no code changes)
+
+Content lives in the database, not in code. For each session you receive four things from the build: the Gamma prompt, the instructor guide, the student guide, and a portal JSON file (`content/weekNN/wNNdD.json`). Then, in the portal:
+
+1. **Instructor → Content**, pick the session, **Upload JSON file** (or paste). The page validates it (exactly 5 quiz questions, 3 to 5 Exam Lens terms, every step has instructions and a checkpoint, every tool has a URL) and shows a diff against the current content. Add a version note, click **Import**.
+2. **Materials**: upload the student guide (PDF or Word) and add the Gamma slides and lab deck links. Students see a Download button and tool links at the top of the session.
+3. **Day of class, after the live check**: tick the five verification boxes, write what you checked, **Mark verified for today**. The session shows green. Unlock warns if a session isn't verified, and importing new content clears the verification so it has to be re-checked.
+4. **Unlock** the session.
+
+Week 1's three files are in `content/week01/`. To seed a fresh deployment, import each one on the Content page.
+
+**Export all content** downloads every session's JSON with version and verification dates, for backup and for your records of exactly what students saw.
+
+Sandboxes (interactive concept pages like the Day 2 classifier) are the one thing still in code: `src/components/`. A session's JSON references one by id (`"sandbox": "classifier"`). New sandboxes are built and deployed ahead of the weeks that need them.
+
+## Attendance
+
+**Instructor → Attendance** defaults to today's session (from the calendar). Mark present, late, or absent per student, or "Mark rest present" after marking the exceptions. Two or more absences add a flag on the dashboard.
 
 ## How grading and insights work
 

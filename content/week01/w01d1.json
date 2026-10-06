@@ -1,0 +1,246 @@
+{
+  "goal": "Pick one task from your current job or the job you want. You'll run it through three assistants today.",
+  "steps": [
+    {
+      "label": "Write your goal",
+      "why": "Every lab starts with your own task so the work matters to you.",
+      "do": [
+        "Think of one task you do (or will do) regularly: a weekly report, answering customer emails, planning a schedule.",
+        "Type it in one or two sentences in the box below. Be specific: 'Summarize my team's weekly sales numbers into a short update' beats 'reporting'."
+      ],
+      "see": "A one or two sentence goal in the box. That's it.",
+      "checkpoint": {
+        "kind": "text",
+        "prompt": "Your task, in one or two sentences",
+        "placeholder": "Example: Draft replies to the five most common customer questions at my store.",
+        "minLength": 20
+      }
+    },
+    {
+      "label": "Create your three accounts",
+      "why": "You'll compare the three big assistants side by side all course long.",
+      "do": [
+        "Open chatgpt.com and click Sign up. Use your Google account to skip a password.",
+        "Open claude.ai and do the same.",
+        "Open gemini.google.com. It signs in with the same Google account automatically.",
+        "Leave all three tabs open."
+      ],
+      "see": "Three browser tabs, each with an empty chat box and a blinking cursor.",
+      "tip": "If a site asks for a phone number, that's normal for the free tier. If you'd rather not, ask your instructor for the class backup account.",
+      "checkpoint": {
+        "kind": "confirm",
+        "prompt": "All three tabs are open and I can type in each one."
+      }
+    },
+    {
+      "label": "Write three questions",
+      "why": "Writing questions before you ask stops the assistant from steering you.",
+      "do": [
+        "Open a new Google Doc and title it 'Week 1 Day 1 comparison'.",
+        "Write three questions about your task that you'd ask an experienced coworker. One factual (what is...), one how-to (how would I...), one judgment (should I...).",
+        "Number them 1, 2, 3."
+      ],
+      "see": "A doc with your goal at the top and three numbered questions.",
+      "checkpoint": {
+        "kind": "text",
+        "prompt": "Paste your three questions",
+        "placeholder": "1. ...\n2. ...\n3. ...",
+        "minLength": 40
+      }
+    },
+    {
+      "label": "Ask all three assistants",
+      "why": "Same question, three answers. The differences are the lesson.",
+      "do": [
+        "Copy question 1. Paste it into ChatGPT, press Enter. Paste the same text into Claude and Gemini.",
+        "Under question 1 in your doc, paste each answer with a label: ChatGPT, Claude, Gemini.",
+        "Repeat for questions 2 and 3."
+      ],
+      "see": "Nine answers in your doc, three under each question. Some will be long; that's fine.",
+      "tip": "If an assistant asks you a clarifying question instead of answering, type 'Just give me your best answer' and continue.",
+      "checkpoint": {
+        "kind": "choice",
+        "prompt": "Quick check: the three assistants gave different answers to the same question. Why?",
+        "options": [
+          "One of them is broken",
+          "They predict likely text from different training and settings, so there's no single 'correct' output",
+          "They looked up different websites",
+          "The question was too short"
+        ],
+        "correct": 1,
+        "why": "Each assistant predicts the next words from its own training and settings. Different models, different predictions. None of them looked anything up unless you saw a 'searching' indicator."
+      }
+    },
+    {
+      "label": "Mark what's wrong or vague",
+      "why": "Spotting the weak spots is the skill. Trusting output blindly is the trap.",
+      "do": [
+        "Read each answer. Highlight in yellow anything that's wrong, made up, or so vague it doesn't help.",
+        "If an answer looks perfect, reply to the assistant: 'What's your source for that?' and highlight anything it can't back up.",
+        "Aim for at least one highlight per assistant."
+      ],
+      "see": "Yellow highlights across your doc. At least three total.",
+      "checkpoint": {
+        "kind": "text",
+        "prompt": "Describe the worst mistake you found and which assistant made it",
+        "placeholder": "Example: Gemini said my state's sales tax is 4% but it's 8%.",
+        "minLength": 20
+      }
+    },
+    {
+      "label": "Sort eight real applications",
+      "why": "This is Domain 1 of the exam: knowing which kind of problem is which.",
+      "do": [
+        "Decide whether each is Regression (predicts a number), Classification (picks a category), or Clustering (finds groups without labels):",
+        "Fraud detection · Sales forecasting · Movie recommendations · Spam filter · House price prediction · Grouping customers by behavior · Photo tagging · Demand planning",
+        "Write your eight answers, one per line, with a short reason."
+      ],
+      "see": "Eight lines. Typical answers: fraud = classification, forecasting = regression, recommendations = clustering or classification, spam = classification, house price = regression, customer groups = clustering, photo tagging = classification, demand = regression.",
+      "checkpoint": {
+        "kind": "choice",
+        "prompt": "Grouping customers by shopping behavior, with no labels given, is:",
+        "options": [
+          "Regression",
+          "Classification",
+          "Clustering",
+          "Reinforcement learning"
+        ],
+        "correct": 2,
+        "why": "No labels and the goal is to find natural groups: that's clustering. Classification needs labeled categories to learn from."
+      }
+    },
+    {
+      "label": "Upload your doc",
+      "do": [
+        "Take a screenshot of your comparison doc showing at least one highlighted answer, or set the doc to 'Anyone with the link can view' and copy the link.",
+        "Upload it below."
+      ],
+      "see": "A thumbnail of your screenshot, or your link, in the submissions list.",
+      "checkpoint": {
+        "kind": "upload",
+        "prompt": "Screenshot or link to your comparison doc"
+      }
+    }
+  ],
+  "stretch": [
+    "Ask each assistant to describe its own limits, then fact-check one claim it made about itself using an official source",
+    "Rewrite your weakest question so all three assistants give a useful answer"
+  ],
+  "doneWhen": [
+    "Three assistants, nine answers, at least three highlights",
+    "All eight applications sorted with one reason each",
+    "Doc screenshot or link submitted"
+  ],
+  "submission": {
+    "prompt": "Upload a screenshot of your comparison doc, or paste a link to it.",
+    "kinds": [
+      "image",
+      "link"
+    ]
+  },
+  "lens": [
+    {
+      "term": "Agentic AI",
+      "plain": "A model plus tools plus a loop that decides its next step.",
+      "exam": "Domain 1: agentic AI as the newest layer of AI."
+    },
+    {
+      "term": "Generative AI",
+      "plain": "AI that creates new content instead of only predicting a label.",
+      "exam": "Domain 1: generative AI built on deep learning."
+    },
+    {
+      "term": "When not to use AI",
+      "plain": "You need an exact repeatable answer, there's not enough good data, or the cost outweighs the value.",
+      "exam": "Domain 1: when AI/ML is and isn't appropriate."
+    },
+    {
+      "term": "Classification vs regression",
+      "plain": "Sorting into categories vs predicting a number.",
+      "exam": "Domain 1: real-world use cases by problem type."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "Which statement about the AI family tree is correct?",
+      "a": [
+        "Machine learning is a type of generative AI",
+        "Deep learning sits inside machine learning, which sits inside AI",
+        "Generative AI replaced machine learning in 2022",
+        "AI and machine learning are the same thing"
+      ],
+      "c": 1,
+      "why": "AI is the umbrella. Machine learning is inside it, deep learning inside that, and generative AI is built on deep learning."
+    },
+    {
+      "q": "A pharmacy needs the exact same tax calculation every time. Why is AI the wrong tool?",
+      "a": [
+        "AI is too expensive for pharmacies",
+        "AI gives plausible answers, not guaranteed exact ones",
+        "Tax rules change too often",
+        "AI can't do math at all"
+      ],
+      "c": 1,
+      "why": "When you need an exact, repeatable answer every time, a rule or formula beats a model that predicts."
+    },
+    {
+      "q": "Predicting next month's sales figure is an example of:",
+      "a": [
+        "Classification",
+        "Clustering",
+        "Regression",
+        "Reinforcement learning"
+      ],
+      "c": 2,
+      "why": "Regression predicts a number. Classification sorts into categories. Clustering finds groups."
+    },
+    {
+      "q": "What makes an AI system an agent rather than a chatbot?",
+      "a": [
+        "It uses a bigger model",
+        "It can take actions with tools and decide its next step",
+        "It answers faster",
+        "It runs on AWS"
+      ],
+      "c": 1,
+      "why": "An agent is a model plus tools plus a loop that decides what to do next."
+    },
+    {
+      "q": "Which was the 2017 breakthrough that today's language models build on?",
+      "a": [
+        "The first chatbot",
+        "The transformer paper",
+        "The launch of ChatGPT",
+        "The 2012 image contest"
+      ],
+      "c": 1,
+      "why": "The 2017 transformer paper introduced attention, the mechanism inside every modern LLM."
+    }
+  ],
+  "tools": [
+    {
+      "name": "ChatGPT",
+      "url": "https://chatgpt.com",
+      "use": "General assistant for the three-way comparison",
+      "free": "Free tier, no card. Shows ads in the US."
+    },
+    {
+      "name": "Claude",
+      "url": "https://claude.ai",
+      "use": "General assistant for the comparison",
+      "free": "Free account."
+    },
+    {
+      "name": "Gemini",
+      "url": "https://gemini.google.com",
+      "use": "General assistant for the comparison",
+      "free": "Free with a Google account."
+    },
+    {
+      "name": "Google Docs",
+      "url": "https://docs.google.com",
+      "use": "Your comparison doc",
+      "free": "Free with a Google account."
+    }
+  ]
+}

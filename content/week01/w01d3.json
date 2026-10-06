@@ -1,0 +1,217 @@
+{
+  "goal": "Decide what mistake would cost more for your classifier: a false alarm or a missed case. Write that down before you compute anything.",
+  "steps": [
+    {
+      "label": "Decide which mistake costs more",
+      "why": "Metrics only make sense once you know which error hurts.",
+      "do": [
+        "Think about your Day 2 classifier as if a business depended on it.",
+        "A false alarm: it says 'yes' when the truth is 'no'. A missed case: it says 'no' when the truth is 'yes'.",
+        "Decide which would cost more in your scenario and why."
+      ],
+      "see": "One sentence naming the costlier mistake.",
+      "checkpoint": {
+        "kind": "text",
+        "prompt": "Which mistake costs more for your classifier, and why?",
+        "placeholder": "Example: A missed case. If this were a defect detector, shipping a bad part costs more than re-checking a good one.",
+        "minLength": 20
+      }
+    },
+    {
+      "label": "Test on 20 new images",
+      "do": [
+        "Open your Teachable Machine project from Day 2 (it's saved in your browser; if not, retrain quickly with two classes).",
+        "Pick one class to be your 'positive'. Show the model 20 objects, 10 positive and 10 not.",
+        "For each, write down what the model said and what was true."
+      ],
+      "see": "A list of 20 rows: predicted and actual.",
+      "checkpoint": {
+        "kind": "confirm",
+        "prompt": "I have 20 predicted-versus-actual results written down."
+      }
+    },
+    {
+      "label": "Build the confusion matrix in Sheets",
+      "why": "The confusion matrix is how every ML team reads a model's mistakes. It's on the exam.",
+      "do": [
+        "Open a new Google Sheet. In A1 type 'Predicted Yes', A2 'Predicted No'. In B0 and C0 (row 1, columns B and C) type 'Actual Yes' and 'Actual No'.",
+        "Count your 20 results into the four cells: True Positive (predicted yes, actual yes), False Positive (predicted yes, actual no), False Negative (predicted no, actual yes), True Negative (predicted no, actual no).",
+        "Check the four cells add to 20."
+      ],
+      "see": "A 2 by 2 grid of counts that sums to 20.",
+      "tip": "Mixed up which is which? False Positive is the false alarm. False Negative is the missed case.",
+      "checkpoint": {
+        "kind": "choice",
+        "prompt": "The model said 'Mug' but it was a phone. Which cell?",
+        "options": [
+          "True Positive",
+          "False Positive",
+          "False Negative",
+          "True Negative"
+        ],
+        "correct": 1,
+        "why": "Predicted yes (mug) when the truth was no: a false positive, the false alarm."
+      }
+    },
+    {
+      "label": "Write the three formulas",
+      "why": "Formulas update when counts change. Typed numbers don't. That rule carries through the whole course.",
+      "do": [
+        "Accuracy: =(TP+TN)/20. Click the TP cell, type +, click TN, close the bracket, divide by 20.",
+        "Precision: =TP/(TP+FP). Of everything it flagged, how many were right.",
+        "Recall: =TP/(TP+FN). Of all the real positives, how many it caught.",
+        "Change one count and watch all three update. Then change it back."
+      ],
+      "see": "Three cells showing decimals between 0 and 1. Changing a count changes them instantly.",
+      "checkpoint": {
+        "kind": "text",
+        "prompt": "Your accuracy, precision, and recall",
+        "placeholder": "Example: Accuracy 0.85, Precision 0.90, Recall 0.80",
+        "minLength": 10
+      }
+    },
+    {
+      "label": "Make three build-versus-buy calls",
+      "why": "The exam asks this constantly: ready-made AWS service, or train your own?",
+      "do": [
+        "For each problem, decide 'managed service' or 'custom model' and give one reason:",
+        "A) Pull text out of 5,000 scanned invoices. B) Predict which of your 300 regular customers will stop ordering next quarter, using your own sales history. C) Transcribe recorded customer calls to text.",
+        "Hint: a managed service fits common tasks (text from images, speech to text). A custom model fits problems only your data can answer."
+      ],
+      "see": "Three decisions with reasons.",
+      "checkpoint": {
+        "kind": "choice",
+        "prompt": "Problem B (predict which of your customers will leave, from your own history) is best handled by:",
+        "options": [
+          "Amazon Textract",
+          "Amazon Transcribe",
+          "A custom model trained on your data",
+          "A spreadsheet formula"
+        ],
+        "correct": 2,
+        "why": "No ready-made service knows your customers. This needs a model trained on your own history, for example in SageMaker. A and C are classic managed-service tasks: Textract for documents, Transcribe for speech."
+      }
+    },
+    {
+      "label": "Share your sheet",
+      "do": [
+        "Click Share in the top right of your Sheet. Change General access to 'Anyone with the link' as Viewer. Copy link.",
+        "Paste it below."
+      ],
+      "see": "Your link in the submissions list.",
+      "checkpoint": {
+        "kind": "upload",
+        "prompt": "Link to your confusion matrix sheet"
+      }
+    }
+  ],
+  "stretch": [
+    "Pick a fraud or medical screening scenario and argue which metric matters most",
+    "Explain why high accuracy could still hide a dangerous model"
+  ],
+  "doneWhen": [
+    "A confusion matrix with working formulas",
+    "Three build-versus-buy decisions with reasons",
+    "Sheet link submitted"
+  ],
+  "submission": {
+    "prompt": "Paste the link to your Google Sheet (set to anyone with the link can view).",
+    "kinds": [
+      "link",
+      "image"
+    ]
+  },
+  "lens": [
+    {
+      "term": "Confusion matrix",
+      "plain": "A 2 by 2 table of right and wrong answers, split by what the model said and what was true.",
+      "exam": "Domain 1: model evaluation metrics."
+    },
+    {
+      "term": "Precision vs recall",
+      "plain": "Precision: of the ones it flagged, how many were right. Recall: of the real cases, how many did it catch.",
+      "exam": "Domain 1: precision, recall, F1, AUC."
+    },
+    {
+      "term": "ML lifecycle",
+      "plain": "Business goal, data, prepare, train, evaluate, deploy, monitor, repeat.",
+      "exam": "Domain 1: ML pipeline stages and MLOps."
+    },
+    {
+      "term": "Managed AI service",
+      "plain": "A ready-made model you call, like Rekognition for images or Textract for documents.",
+      "exam": "Domain 1: AWS managed AI services vs custom models in SageMaker."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "A cancer screening model misses 30% of real cases but never raises a false alarm. Which metric is low?",
+      "a": [
+        "Precision",
+        "Recall",
+        "Accuracy",
+        "Latency"
+      ],
+      "c": 1,
+      "why": "Recall measures how many real cases were caught. Missing 30% means recall is 70%."
+    },
+    {
+      "q": "Only 1 in 1,000 transactions is fraud. A model that says 'not fraud' every time scores 99.9% accuracy. Why is that dangerous?",
+      "a": [
+        "Accuracy is always wrong",
+        "It catches zero fraud; accuracy hides it because fraud is rare",
+        "The model is overfitting",
+        "Fraud models shouldn't use accuracy"
+      ],
+      "c": 1,
+      "why": "When one class is rare, accuracy can look great while the model is useless. Recall on the rare class is what matters."
+    },
+    {
+      "q": "Which comes first in the ML lifecycle?",
+      "a": [
+        "Training the model",
+        "Defining the business goal",
+        "Deploying to production",
+        "Choosing a GPU"
+      ],
+      "c": 1,
+      "why": "Every stage after depends on knowing what problem you're solving and how you'll measure success."
+    },
+    {
+      "q": "A company wants to pull text out of scanned invoices and has no ML team. Best choice?",
+      "a": [
+        "Train a custom model in SageMaker",
+        "Use a managed service like Amazon Textract",
+        "Hire data scientists first",
+        "Use a spreadsheet"
+      ],
+      "c": 1,
+      "why": "A managed service handles a common task out of the box. Custom models are for problems no ready-made service covers."
+    },
+    {
+      "q": "After a model is deployed, why does it still need monitoring?",
+      "a": [
+        "To bill customers",
+        "Because the real-world data can drift away from what it trained on",
+        "To make it faster",
+        "It doesn't; deployment is the last step"
+      ],
+      "c": 1,
+      "why": "Data drift means the world changes while the model stays the same. Monitoring catches the drop in quality."
+    }
+  ],
+  "tools": [
+    {
+      "name": "Teachable Machine",
+      "url": "https://teachablemachine.withgoogle.com",
+      "use": "Test your Day 2 model",
+      "free": "Free, no account needed."
+    },
+    {
+      "name": "Google Sheets",
+      "url": "https://sheets.google.com",
+      "use": "Confusion matrix and formulas",
+      "free": "Free with a Google account."
+    }
+  ]
+}

@@ -27,3 +27,18 @@ export interface StoreExt {
   flashcards(): Promise<Flashcard[]>;
   setFlashcard(term_key: string, status: "known" | "review" | null): Promise<void>;
 }
+
+import type { SessionContent } from "../content/course";
+export type ContentRow = { session_id: string; content: SessionContent; version_note: string | null; updated_at: string; verified_at: string | null; verification: { checks: Record<string, boolean>; note: string } | null };
+export type Material = { id: number; session_id: string; kind: "student_guide" | "slides" | "lab_deck" | "other"; title: string; file_path: string | null; url: string | null; created_at: string };
+export type Attendance = { student_id: string; session_id: string; status: "present" | "late" | "absent" };
+export interface StoreContent {
+  allContent(): Promise<ContentRow[]>;
+  saveContent(session_id: string, content: SessionContent, version_note: string): Promise<void>;
+  setVerification(session_id: string, v: { checks: Record<string, boolean>; note: string }): Promise<void>;
+  materials(): Promise<Material[]>;
+  addMaterial(m: { session_id: string; kind: Material["kind"]; title: string; file?: File; url?: string }): Promise<void>;
+  deleteMaterial(id: number): Promise<void>;
+  attendance(): Promise<Attendance[]>;
+  setAttendance(student_id: string, session_id: string, status: Attendance["status"] | null): Promise<void>;
+}
