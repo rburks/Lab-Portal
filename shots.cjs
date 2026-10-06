@@ -1,0 +1,26 @@
+const { chromium } = require('playwright');
+(async () => {
+  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
+  const pg = await b.newPage({ viewport: { width: 1360, height: 900 } });
+  const errs = []; pg.on('pageerror', e => errs.push(e.message)); pg.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+  await pg.goto('http://localhost:4173/', { waitUntil: 'networkidle' });
+  await pg.screenshot({ path: 'shots/01-coursemap.png', fullPage: false });
+  await pg.click('text=Week 1 Day 2'); await pg.waitForTimeout(300);
+  await pg.screenshot({ path: 'shots/02-lab.png' });
+  await pg.click('.tabs >> text=Sandbox'); await pg.waitForTimeout(300);
+  await pg.screenshot({ path: 'shots/03-sandbox.png' });
+  await pg.click('.tabs >> text=Submit'); await pg.waitForTimeout(300);
+  await pg.screenshot({ path: 'shots/04-submit.png' });
+  await pg.selectOption('select[aria-label="Switch demo user"]', 'u-instr'); await pg.waitForSelector('text=Instructor', { timeout: 5000 }); await pg.click('nav.nav >> text=Instructor'); await pg.waitForTimeout(500);
+  await pg.screenshot({ path: 'shots/05-overview.png', fullPage: true });
+  await pg.click('text=Progress grid'); await pg.waitForTimeout(500);
+  await pg.screenshot({ path: 'shots/06-grid.png' });
+  await pg.click('.cell.submitted >> nth=0').catch(() => {}); await pg.waitForTimeout(300);
+  await pg.screenshot({ path: 'shots/07-drawer.png' });
+  await pg.keyboard.press('Escape'); await pg.click('.drawer .btn.ghost.sm').catch(()=>{}); await pg.click('text=Unlock sessions'); await pg.waitForTimeout(500);
+  await pg.screenshot({ path: 'shots/08-release.png' });
+  await pg.setViewportSize({ width: 400, height: 820 }); await pg.goto('http://localhost:4173/', { waitUntil: 'networkidle' });
+  await pg.screenshot({ path: 'shots/09-mobile.png' });
+  console.log('errors:', errs);
+  await b.close();
+})();
