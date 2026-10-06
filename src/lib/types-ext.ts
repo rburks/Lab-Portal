@@ -5,7 +5,8 @@ export type Slot = { id: number; weekday: number; start_time: string; minutes: n
 export type OHRequest = { id: number; student_id: string; slot_id: number | null; requested_at: string; topic: string; status: "pending" | "accepted" | "declined" | "done" | "cancelled"; instructor_note: string | null; created_at: string };
 export type Message = { id: number; thread_student_id: string; sender_id: string; body: string; created_at: string; read_at: string | null };
 export type Announcement = { id: number; title: string; body: string; pinned: boolean; created_at: string };
-export type Flashcard = { term_key: string; status: "known" | "review" };
+export type Flashcard = { term_key: string; status: "known" | "review"; due?: string; streak?: number; obj?: string | null };
+export type MockAttempt = { id?: string; student_id?: string; scope: string; total: number; correct: number; scaled: number; seconds: number; answers: { id: string; obj: string; correct: boolean }[]; created_at?: string };
 
 export interface StoreExt {
   settings(): Promise<CourseSettings>;
@@ -26,6 +27,10 @@ export interface StoreExt {
   deleteAnnouncement(id: number): Promise<void>;
   flashcards(): Promise<Flashcard[]>;
   setFlashcard(term_key: string, status: "known" | "review" | null): Promise<void>;
+  // Spaced review: rate a card and schedule when it comes back.
+  rateCard(term_key: string, obj: string, got: boolean): Promise<void>;
+  mockAttempts(): Promise<MockAttempt[]>;         // own for students, all for instructor
+  saveMock(m: MockAttempt): Promise<void>;
 }
 
 import type { SessionContent } from "../content/course";
