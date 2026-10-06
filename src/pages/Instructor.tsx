@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { SESSIONS, WEEKS, type Session } from "../content/course";
 import { useAuth } from "../auth";
@@ -219,20 +219,57 @@ function ReleasePanel({ d, reload }: { d: Data; reload: () => Promise<void> }) {
 function Roster({ d, reload }: { d: Data; reload: () => Promise<void> }) {
   const { toast } = useAuth();
   const [rows, setRows] = useState<{ email: string; full_name: string | null; role: "student" | "instructor" }[]>([]);
+  const blank = () => ({ name: "", email: "" });
+  const [draft, setDraft] = useState([blank(), blank(), blank()]);
+  const [bulk, setBulk] = useState(false);
   const [paste, setPaste] = useState("");
+  const [busy, setBusy] = useState(false);
   const load = useCallback(async () => setRows(await store.roster()), []);
   useEffect(() => { load(); }, [load]);
-  const add = async () => {
-    const parsed = paste.split(/\n|,|;/).map(l => l.trim()).filter(Boolean).map(l => { const m = l.match(/^(.*?)[\s<]*([^\s<>]+@[^\s<>]+)>?$/); return m ? { email: m[2].toLowerCase(), full_name: m[1].trim().replace(/["']/g, "") || undefined } : null; }).filter((x): x is { email: string; full_name: string | undefined } => !!x);
-    if (!parsed.length) return toast("Paste one email per line, optionally with a name: Jane Doe jane@example.com");
-    await store.addToRoster(parsed); setPaste(""); await load(); await reload(); toast(`${parsed.length} added to roster`);
+  const validEmail = (e: string) => /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(e.trim());
+  const existing = new Set(rows.map(r => r.email));
+  const filled = draft.filter(r => r.name.trim() || r.email.trim());
+  const problems = filled.map((r, i) => !r.email.trim() ? `Row ${i + 1}: email is missing` : !validEmail(r.email) ? `Row ${i + 1}: "${r.email}" doesn't look like an email` : existing.has(r.email.trim().toLowerCase()) ? `Row ${i + 1}: ${r.email.trim().toLowerCase()} is already on the roster` : null).filter((x): x is string => !!x);
+  const dupes = filled.map(r => r.email.trim().toLowerCase()).filter((e, i, a) => e && a.indexOf(e) !== i);
+  if (dupes.length) problems.push(`Entered twice: ${[...new Set(dupes)].join(", ")}`);
+  const set = (i: number, k: "name" | "email", v: string) => setDraft(ds => ds.map((r, j) => j === i ? { ...r, [k]: v } : r));
+  const submit = async (list: { email: string; full_name: string | undefined }[]) => {
+    setBusy(true);
+    try { await store.addToRoster(list); await load(); await reload(); toast(`${list.length} student${list.length === 1 ? "" : "s"} added`); }
+    catch (e) { toast("Couldn't add: " + (e as Error).message); }
+    finally { setBusy(false); }
+  };
+  const addRows = async () => { if (!filled.length || problems.length) return; await submit(filled.map(r => ({ email: r.email.trim().toLowerCase(), full_name: r.name.trim() || undefined }))); setDraft([blank(), blank(), blank()]); };
+  const addPaste = async () => {
+    const parsed = paste.split(/\n|;/).map(l => l.trim()).filter(Boolean).map(l => { const m = l.match(/^(.*?)[\s,<]*([^\s<>,]+@[^\s<>,]+)>?$/); return m ? { email: m[2].toLowerCase(), full_name: m[1].trim().replace(/["',]/g, "") || undefined } : null; }).filter((x): x is { email: string; full_name: string | undefined } => !!x && validEmail(x.email) && !existing.has(x.email));
+    if (!parsed.length) return toast("Nothing new to add. One student per line: Jane Doe jane@example.com");
+    await submit(parsed); setPaste(""); setBulk(false);
   };
   return (
     <div className="stack" style={{ gap: 14 }}>
-      <div className="card stack">
-        <h3>Add students</h3><p className="small muted">Paste one per line. A name before the email is optional. Only emails on this list can sign in.</p>
-        <textarea id="roster-paste" value={paste} onChange={e => setPaste(e.target.value)} placeholder={"Jane Doe jane@example.com\nsam@example.com"} style={{ minHeight: 110, fontFamily: "var(--mono)", fontSize: ".85rem" }} />
-        <div><button className="btn" onClick={add}>Add to roster</button></div>
+      <div className="card stack" style={{ gap: 12 }}>
+        <div className="row between"><div><h3>Add students</h3><p className="small muted" style={{ marginTop: 2 }}>Only emails on the roster can sign in. Students get a magic link by email; no passwords.</p></div>
+          <button className="btn ghost xs" onClick={() => setBulk(b => !b)}>{bulk ? "Enter one by one" : "Paste a list instead"}</button></div>
+        {!bulk ? <>
+          <div className="roster-form">
+            <div className="eyebrow">Name</div><div className="eyebrow">Email</div><div />
+            {draft.map((r, i) => { const bad = r.email.trim() && !validEmail(r.email); return (
+              <Fragment key={i}>
+                <input id={`rn-${i}`} value={r.name} placeholder="Jane Doe" autoComplete="off" onChange={e => set(i, "name", e.target.value)} />
+                <input id={`re-${i}`} type="email" value={r.email} placeholder="jane@example.com" autoComplete="off" style={bad ? { borderColor: "var(--bad)" } : undefined} onChange={e => set(i, "email", e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (i === draft.length - 1) setDraft(ds => [...ds, blank()]); const n = document.getElementById(`rn-${i + 1}`); n?.focus(); } }} />
+                <button className="btn ghost xs" title="Remove row" disabled={draft.length === 1} onClick={() => setDraft(ds => ds.filter((_, j) => j !== i))}>✕</button>
+              </Fragment>); })}
+          </div>
+          {problems.length > 0 && <div className="tip-box small">{problems.map((p, i) => <div key={i}>{p}</div>)}</div>}
+          <div className="row between">
+            <button className="btn ghost sm" onClick={() => setDraft(ds => [...ds, blank()])}>+ Add another row</button>
+            <button className="btn" disabled={busy || !filled.length || problems.length > 0} onClick={addRows}>{busy ? "Adding…" : `Add ${filled.length || ""} to roster`}</button>
+          </div>
+        </> : <>
+          <p className="small muted">One student per line, name first then email, or just the email. Pasting a two-column spreadsheet selection works.</p>
+          <textarea id="roster-paste" value={paste} onChange={e => setPaste(e.target.value)} placeholder={"Jane Doe\tjane@example.com\nsam@example.com"} style={{ minHeight: 120, fontFamily: "var(--mono)", fontSize: ".85rem" }} />
+          <div><button className="btn" disabled={busy || !paste.trim()} onClick={addPaste}>{busy ? "Adding…" : "Add to roster"}</button></div>
+        </>}
       </div>
       <div className="card"><h3>Roster ({rows.length})</h3>
         <div className="grid-wrap"><table className="grid" style={{ marginTop: 8 }}><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Signed in</th><th></th></tr></thead><tbody>
