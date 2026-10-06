@@ -222,3 +222,8 @@ table.grid td.day-cell { border-left: 1px solid var(--line); }
 .mday .ev.buf { background: var(--warn-soft); color: var(--warn); }
 .mday .ev.oh { background: var(--good-soft); color: var(--good); }
 @media (max-width: 760px) { .mday { min-height: 56px; } .mday .ev { font-size: .66rem; padding: 1px 4px; } }
+
+/* roster entry form */
+.roster-form { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(200px, 1.4fr) 34px; gap: 8px 10px; align-items: center; }
+.roster-form input { width: 100%; }
+@media (max-width: 640px) { .roster-form { grid-template-columns: 1fr 34px; } .roster-form .eyebrow:nth-child(2), .roster-form .eyebrow:nth-child(3) { display: none; } }
