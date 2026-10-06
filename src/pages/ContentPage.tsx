@@ -6,7 +6,14 @@ import { store, type Attendance, type ContentRow, type Material, type Profile } 
 import { buildSchedule, fmtLong, iso } from "../lib/schedule";
 import { download, fmtDate, initials } from "../lib/logic";
 
-const CHECKS: [string, string][] = [["tools", "Every tool opened live today; free tier and no-card status confirmed on the vendor's own page"], ["links", "Every link in steps, tools, and materials opens to the right page"], ["facts", "Dates, prices, version numbers, and regulatory facts re-checked against primary sources"], ["quiz", "All five quiz answers and every checkpoint answer are correct"], ["guide", "Steps, Exam Lens, and quiz match the student guide word for word"]];
+function describe(e: unknown): string {
+  const m = (e as { message?: string; code?: string; details?: string })?.message || String(e);
+  if (/relation .* does not exist|Could not find the table|schema cache/i.test(m)) return `${m}. The database tables for this feature haven't been created yet: run the "Added October 6 (content in DB, materials, verification, attendance)" section of supabase/schema.sql in the Supabase SQL editor.`;
+  if (/Bucket not found/i.test(m)) return `${m}. The "materials" storage bucket doesn't exist yet: run the same October 6 SQL section, which creates it.`;
+  if (/row-level security|permission denied|not authorized/i.test(m)) return `${m}. Your account isn't being treated as an instructor by the database. Check that your row in the profiles table has role = instructor.`;
+  return m;
+}
+const CHECKS: [string, string][] = [["tools", "Every tool opened live today; free tier and no-card status confirmed on the vendor's own page"], ["links", "Every link in steps, tools, and materials opens to the right page"], ["facts", "Dates, prices, version numbers, and regulatory facts re-checked against primary sources"], ["quiz", "All five quiz answers, every checkpoint answer, and every exam practice answer are correct"], ["guide", "Steps, Exam Lens, and quiz match the student guide word for word; exam objective IDs checked against the official guide"]];
 
 export function ContentPage() {
   const { toast, reloadContent } = useAuth();
@@ -40,7 +47,7 @@ export function ContentPage() {
 }
 
 function Importer({ sel, current, onDone, toast }: { sel: string; current?: SessionContent; onDone: () => Promise<void>; toast: (m: string) => void }) {
-  const [text, setText] = useState(""); const [note, setNote] = useState(""); const fileRef = useRef<HTMLInputElement>(null);
+  const [text, setText] = useState(""); const [note, setNote] = useState(""); const [err, setErr] = useState(""); const fileRef = useRef<HTMLInputElement>(null);
   type Parsed = { ok: SessionContent; err?: undefined } | { err: string; ok?: undefined };
   const parsed = useMemo<Parsed | null>(() => { if (!text.trim()) return null; try { return { ok: JSON.parse(text) as SessionContent }; } catch (e) { return { err: (e as Error).message }; } }, [text]);
   const good = parsed && parsed.ok ? parsed.ok : null;
@@ -54,9 +61,10 @@ function Importer({ sel, current, onDone, toast }: { sel: string; current?: Sess
       {parsed && parsed.err && <div className="tip-box small"><b>Not valid JSON:</b> {parsed.err}</div>}
       {good && problems.length > 0 && <div className="tip-box small"><b>{problems.length} problem{problems.length === 1 ? "" : "s"} to fix before import:</b><ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{problems.map((p, i) => <li key={i}>{p}</li>)}</ul></div>}
       {good && !problems.length && <>
-        <div className="see-box small"><b>Valid.</b> {good.steps!.length} steps, {good.quiz!.length} quiz questions, {good.lens!.length} Exam Lens terms, {good.tools!.length} tools{good.sandbox ? `, sandbox: ${good.sandbox}` : ""}.</div>
+        <div className="see-box small"><b>Valid.</b> {good.steps!.length} steps, {good.quiz!.length} quiz questions, {good.lens!.length} Exam Lens terms, {good.tools!.length} tools{good.sandbox ? `, sandbox: ${good.sandbox}` : ""}. Exam block: {good.exam!.cards.length} cards, {good.exam!.practice.length} practice questions, objectives {good.exam!.objectives.join(", ") || "none (not tested)"}.</div>
         <div className="callout small"><b>Changes vs current:</b><ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{diff.map((d, i) => <li key={i}>{d}</li>)}</ul></div>
-        <div className="row"><input id="version-note" placeholder="Version note, e.g. Built Oct 9; revised quiz Q3" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1, minWidth: 220 }} /><button className="btn" disabled={!note.trim()} onClick={async () => { await store.saveContent(sel, good, note.trim()); setText(""); setNote(""); await onDone(); toast("Content imported. Verify it before unlocking."); }}>Import</button></div>
+        {err && <div className="tip-box small"><b>Import failed:</b> {err}</div>}
+        <div className="row"><input id="version-note" placeholder="Version note, e.g. Built Oct 9; revised quiz Q3" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1, minWidth: 220 }} /><button className="btn" disabled={!note.trim()} onClick={async () => { try { await store.saveContent(sel, good, note.trim()); setText(""); setNote(""); await onDone(); toast("Content imported. Verify it before unlocking."); } catch (e) { setErr(describe(e)); } }}>Import</button></div>
       </>}
     </div>
   );
@@ -72,14 +80,14 @@ function Verify({ row, onDone, toast }: { row: ContentRow; onDone: () => Promise
       <p className="small muted">Run this the day of class, after the live check. All five must be true to mark verified.</p>
       {CHECKS.map(([k, label]) => <label key={k} className="row" style={{ gap: 10, alignItems: "flex-start", cursor: "pointer" }}><input type="checkbox" checked={!!checks[k]} onChange={e => setChecks({ ...checks, [k]: e.target.checked })} /><span className="small">{label}</span></label>)}
       <input id="verify-note" placeholder="What you checked and anything that changed, e.g. 'Gemini free tier confirmed; Teachable Machine URL unchanged'" value={note} onChange={e => setNote(e.target.value)} />
-      <div><button className="btn" disabled={!all || !note.trim()} onClick={async () => { await store.setVerification(row.session_id, { checks, note: note.trim() }); await onDone(); toast("Marked verified"); }}>Mark verified for today</button></div>
+      <div><button className="btn" disabled={!all || !note.trim()} onClick={async () => { try { await store.setVerification(row.session_id, { checks, note: note.trim() }); await onDone(); toast("Marked verified"); } catch (e) { toast("Could not save: " + describe(e)); } }}>Mark verified for today</button></div>
       <div className="row small muted" style={{ gap: 6 }}><span>Tools in this session:</span>{(row.content.tools || []).map(t => <a key={t.name} href={t.url} target="_blank" rel="noreferrer" className="pill acc" style={{ textDecoration: "none" }}>{t.name} ↗</a>)}</div>
     </div>
   );
 }
 
 function Materials({ sel, mats, onDone, toast }: { sel: string; mats: Material[]; onDone: () => Promise<void>; toast: (m: string) => void }) {
-  const [kind, setKind] = useState<Material["kind"]>("student_guide"); const [title, setTitle] = useState(""); const [url, setUrl] = useState(""); const [busy, setBusy] = useState(false); const fileRef = useRef<HTMLInputElement>(null);
+  const [kind, setKind] = useState<Material["kind"]>("student_guide"); const [title, setTitle] = useState(""); const [url, setUrl] = useState(""); const [busy, setBusy] = useState(false); const [mErr, setMErr] = useState(""); const fileRef = useRef<HTMLInputElement>(null);
   const s = SESSIONS.find(x => x.id === sel)!;
   useEffect(() => { setTitle(kind === "student_guide" ? `Week ${s.week} Day ${s.day} Student Guide` : kind === "slides" ? "Slides (Gamma)" : kind === "lab_deck" ? "Lab deck (Gamma)" : ""); }, [kind, s]);
   return (
@@ -89,9 +97,10 @@ function Materials({ sel, mats, onDone, toast }: { sel: string; mats: Material[]
       <div className="row" style={{ alignItems: "flex-end" }}>
         <label className="stack" style={{ gap: 4, width: "auto" }}><span className="eyebrow">Type</span><select style={{ width: "auto" }} value={kind} onChange={e => setKind(e.target.value as Material["kind"])}><option value="student_guide">Student guide (file)</option><option value="slides">Slides link</option><option value="lab_deck">Lab deck link</option><option value="other">Other</option></select></label>
         <label className="stack" style={{ gap: 4, flex: 1, minWidth: 180 }}><span className="eyebrow">Title</span><input value={title} onChange={e => setTitle(e.target.value)} /></label>
-        {kind === "student_guide" ? <><button className="btn" disabled={busy || !title.trim()} onClick={() => fileRef.current?.click()}>{busy ? "Uploading…" : "Choose file and upload"}</button><input ref={fileRef} type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden onChange={async e => { const f = e.target.files?.[0]; if (!f) return; setBusy(true); try { await store.addMaterial({ session_id: sel, kind, title: title.trim(), file: f }); await onDone(); toast("Uploaded"); } catch (err) { toast("Upload failed: " + (err as Error).message); } finally { setBusy(false); } }} /></>
-          : <><label className="stack" style={{ gap: 4, flex: 2, minWidth: 220 }}><span className="eyebrow">URL</span><input type="url" placeholder="https://gamma.app/docs/…" value={url} onChange={e => setUrl(e.target.value)} /></label><button className="btn" disabled={!url.trim() || !title.trim()} onClick={async () => { await store.addMaterial({ session_id: sel, kind, title: title.trim(), url: url.trim() }); setUrl(""); await onDone(); toast("Added"); }}>Add link</button></>}
+        {kind === "student_guide" ? <><button className="btn" disabled={busy || !title.trim()} onClick={() => fileRef.current?.click()}>{busy ? "Uploading…" : "Choose file and upload"}</button><input ref={fileRef} type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden onChange={async e => { const f = e.target.files?.[0]; if (!f) return; setBusy(true); try { await store.addMaterial({ session_id: sel, kind, title: title.trim(), file: f }); await onDone(); toast("Uploaded"); setMErr(""); } catch (err) { setMErr(describe(err)); } finally { setBusy(false); e.target.value = ""; } }} /></>
+          : <><label className="stack" style={{ gap: 4, flex: 2, minWidth: 220 }}><span className="eyebrow">URL</span><input type="url" placeholder="https://gamma.app/docs/…" value={url} onChange={e => setUrl(e.target.value)} /></label><button className="btn" disabled={!url.trim() || !title.trim()} onClick={async () => { try { await store.addMaterial({ session_id: sel, kind, title: title.trim(), url: url.trim() }); setUrl(""); await onDone(); toast("Added"); setMErr(""); } catch (err) { setMErr(describe(err)); } }}>Add link</button></>}
       </div>
+      {mErr && <div className="tip-box small"><b>Upload failed:</b> {mErr}</div>}
       <div className="stack" style={{ gap: 6 }}>{mats.map(m => <div key={m.id} className="row between" style={{ padding: "6px 0", borderBottom: "1px solid var(--line)" }}><span className="small"><span className="pill" style={{ marginRight: 8 }}>{m.kind.replace("_", " ")}</span>{m.url ? <a href={m.url} target="_blank" rel="noreferrer">{m.title}</a> : m.title}</span><button className="btn ghost xs" onClick={async () => { await store.deleteMaterial(m.id); await onDone(); }}>Remove</button></div>)}{!mats.length && <div className="small muted">Nothing attached yet.</div>}</div>
     </div>
   );
