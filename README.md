@@ -50,7 +50,7 @@ Open the local URL. With no `.env` file the app runs in demo mode with 12 exampl
 
 Push to `main` and Netlify redeploys. If the schema changed (check the bottom of `supabase/schema.sql` for dated sections), paste that dated section into the Supabase SQL editor and run it. All sections are safe to re-run.
 
-October 6 additions: `calendar_days`, `office_hour_slots`, `office_hour_requests`, `messages`, `announcements`, `flashcards`, `course_settings`, a `responses` column on `progress`, and (second batch) `session_content`, `session_materials`, `attendance`, plus a public `materials` storage bucket.
+October 6 additions: `calendar_days`, `office_hour_slots`, `office_hour_requests`, `messages`, `announcements`, `flashcards`, `course_settings`, a `responses` column on `progress`, and (second batch) `session_content`, `session_materials`, `attendance`, plus a public `materials` storage bucket. Third batch (exam guide): `due`, `streak`, `obj` on `flashcards`, and `mock_attempts`.
 
 ## Guided labs
 
@@ -70,6 +70,14 @@ Week 1's three files are in `content/week01/`. To seed a fresh deployment, impor
 **Export all content** downloads every session's JSON with version and verification dates, for backup and for your records of exactly what students saw.
 
 Sandboxes (interactive concept pages like the Day 2 classifier) are the one thing still in code: `src/components/`. A session's JSON references one by id (`"sandbox": "classifier"`). New sandboxes are built and deployed ahead of the weeks that need them.
+
+## Exam study guide
+
+Built around the official AIF-C01 objective list in `src/content/objectives.json` (69 objectives, exam guide v1.1, April 30, 2026). Each session's JSON carries an `exam` block: `objectives` (official IDs like `1.1.2`), `cards` (one question per card, answer in plain words), `practice` (exam-style scenarios with four options and a reason each wrong option is wrong), and optional `notTested`. The validator rejects unknown objective IDs, card fronts that aren't questions, and questions without exactly four options.
+
+Students see three views. **Exam map**: every domain, task statement, and objective, marked Covered (links to the session), Coming (week number), or taught but not tested. **Flashcards**: spaced review; fuzzy cards return in 2 days, correct ones in 7, 21, then 45. **Mock exam**: timed at the real pace (83 seconds per question), no feedback until the end, an estimated scaled score against 700, and a per-objective miss list. Attempts are saved in `mock_attempts` (instructors can read all).
+
+If the official guide changes, update `objectives.json` and the `first` session for any new objective; nothing else needs to change.
 
 ## Attendance
 
