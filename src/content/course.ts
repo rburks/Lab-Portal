@@ -1,3 +1,6 @@
+import objectivesData from "./objectives.json";
+export const OBJECTIVES = objectivesData;
+const OBJECTIVE_IDS = new Set(objectivesData.objectives.map(o => o.id));
 export type QuizQ = { q: string; a: string[]; c: number; why: string };
 export type LensTerm = { term: string; plain: string; exam: string };
 export type Checkpoint =
@@ -14,9 +17,15 @@ export type Step = {
   checkpoint?: Checkpoint;
 };
 export type Tool = { name: string; url: string; use: string; free: string };
+// Exam block: built against the official AIF-C01 objective IDs in objectives.json.
+// A card asks one question (front) and answers it in plain words (back). A practice item is an exam-style scenario.
+export type ExamCard = { id: string; obj: string; q: string; a: string; term?: string };
+export type ExamQ = { id: string; obj: string; q: string; a: string[]; c: number; why: string; wrong?: string[] };
+export type ExamBlock = { objectives: string[]; cards: ExamCard[]; practice: ExamQ[]; notTested?: { term: string; why: string }[] };
 export type SessionContent = {
   goal?: string; steps?: Step[]; stretch?: string[]; doneWhen?: string[]; lens?: LensTerm[]; quiz?: QuizQ[];
   sandbox?: "classifier"; submission?: { prompt: string; kinds: Array<"image" | "link" | "text"> }; tools?: Tool[];
+  exam?: ExamBlock;
 };
 export type Session = {
   id: string;            // e.g. "w01d2"
@@ -32,6 +41,7 @@ export type Session = {
   sandbox?: "classifier";
   submission?: { prompt: string; kinds: Array<"image" | "link" | "text"> };
   tools?: Tool[];
+  exam?: ExamBlock;
   built: boolean;        // false = shell only; true once content is loaded from the database
 };
 export type Week = { n: number; theme: string; phase: number };
@@ -83,7 +93,7 @@ export const SESSIONS: Session[] = WEEKS.flatMap(w =>
 );
 
 // Content registry: the database holds each session's content; this loads it into the shells above.
-const CONTENT_KEYS: (keyof SessionContent)[] = ["goal", "steps", "stretch", "doneWhen", "lens", "quiz", "sandbox", "submission", "tools"];
+const CONTENT_KEYS: (keyof SessionContent)[] = ["goal", "steps", "stretch", "doneWhen", "lens", "quiz", "sandbox", "submission", "tools", "exam"];
 export function applyContent(map: Record<string, SessionContent>) {
   for (const s of SESSIONS) {
     const c = map[s.id];
@@ -108,8 +118,25 @@ export function validateContent(c: unknown): string[] {
   if (!Array.isArray(x.tools) || !x.tools.length) e.push("tools: list at least one tool");
   else x.tools.forEach((t: unknown, i: number) => { const tl = t as Record<string, unknown>; if (!tl.name || !tl.url || !tl.use || !tl.free) e.push(`tools[${i}]: needs name, url, use, free`); if (tl.url && !/^https?:\/\//.test(String(tl.url))) e.push(`tools[${i}]: url must start with http`); });
   if (x.sandbox && x.sandbox !== "classifier") e.push("sandbox: unknown sandbox id");
+  // Exam block: every session that is tested needs cards and practice mapped to official objective IDs.
+  if (!x.exam || typeof x.exam !== "object") e.push("exam: missing (objectives, cards, practice). Every session needs an exam block; use objectives: [] for a day that isn't tested.");
+  else {
+    const ex = x.exam as Record<string, unknown>;
+    const objs = Array.isArray(ex.objectives) ? (ex.objectives as unknown[]).map(String) : [];
+    if (!Array.isArray(ex.objectives)) e.push("exam.objectives: must be a list of objective IDs like \"1.1.1\"");
+    objs.forEach(o => { if (!OBJECTIVE_IDS.has(o)) e.push(`exam.objectives: ${o} is not in the official AIF-C01 objective list`); });
+    const tested = objs.length > 0;
+    const cards = Array.isArray(ex.cards) ? (ex.cards as unknown[]) : [];
+    const prac = Array.isArray(ex.practice) ? (ex.practice as unknown[]) : [];
+    if (tested && cards.length < 6) e.push("exam.cards: need at least 6 cards for a tested session");
+    cards.forEach((c, i) => { const k = c as Record<string, unknown>; if (!k.id || !k.obj || !k.q || !k.a) e.push(`exam.cards[${i}]: needs id, obj, q, a`); if (k.q && !/\?\s*$/.test(String(k.q))) e.push(`exam.cards[${i}]: front must be a question ending in "?"`); if (k.obj && !objs.includes(String(k.obj))) e.push(`exam.cards[${i}]: obj ${k.obj} is not in exam.objectives`); if (k.a && String(k.a).length > 320) e.push(`exam.cards[${i}]: answer over 320 characters; one idea per card`); });
+    if (tested && prac.length < 6) e.push("exam.practice: need at least 6 scenario questions for a tested session");
+    prac.forEach((p, i) => { const k = p as Record<string, unknown>; if (!k.id || !k.obj || !k.q || !Array.isArray(k.a) || typeof k.c !== "number" || !k.why) e.push(`exam.practice[${i}]: needs id, obj, q, a[], c, why`); if (Array.isArray(k.a) && (k.a as unknown[]).length !== 4) e.push(`exam.practice[${i}]: exactly 4 options, like the real exam`); if (Array.isArray(k.a) && typeof k.c === "number" && (k.c < 0 || k.c >= (k.a as unknown[]).length)) e.push(`exam.practice[${i}]: c out of range`); if (k.obj && !objs.includes(String(k.obj))) e.push(`exam.practice[${i}]: obj ${k.obj} is not in exam.objectives`); if (k.wrong && (!Array.isArray(k.wrong) || (k.wrong as unknown[]).length !== (k.a as unknown[])?.length)) e.push(`exam.practice[${i}]: wrong[] must have one line per option (use "" for the correct one)`); });
+    const ids = [...cards, ...prac].map(z => String((z as Record<string, unknown>).id)); if (new Set(ids).size !== ids.length) e.push("exam: card and practice ids must be unique within the session");
+  }
   return e;
 }
+
 
 // Human-readable diff between two contents, for the import preview.
 export function diffContent(a: SessionContent | undefined, b: SessionContent): string[] {
@@ -122,6 +149,7 @@ export function diffContent(a: SessionContent | undefined, b: SessionContent): s
   (a.quiz || []).forEach((q, i) => { const n = (b.quiz || [])[i]; if (!n || JSON.stringify(q) !== JSON.stringify(n)) out.push(`Quiz question ${i + 1} changed.`); });
   if (JSON.stringify(a.lens) !== JSON.stringify(b.lens)) out.push("Exam Lens terms changed.");
   if (JSON.stringify(a.tools) !== JSON.stringify(b.tools)) out.push("Tools list changed.");
+  if (JSON.stringify(a.exam) !== JSON.stringify(b.exam)) { const ac = a.exam?.cards.length ?? 0, bc = b.exam?.cards.length ?? 0, ap = a.exam?.practice.length ?? 0, bp = b.exam?.practice.length ?? 0; out.push(`Exam block changed: cards ${ac} → ${bc}, practice ${ap} → ${bp}, objectives ${(b.exam?.objectives || []).join(", ") || "none"}.`); }
   if (JSON.stringify(a.doneWhen) !== JSON.stringify(b.doneWhen) || JSON.stringify(a.stretch) !== JSON.stringify(b.stretch)) out.push("Done-when or Stretch changed.");
   if (!out.length) out.push("No differences from the current content.");
   return out;
