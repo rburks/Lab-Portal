@@ -1,12 +1,18 @@
 // Data layer. One interface, two implementations: Supabase (production) and Demo (in-memory, no backend).
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { SESSIONS, type Session } from "../content/course";
-import type { Announcement, Attendance, CalendarDay, ContentRow, CourseSettings, Flashcard, Material, Message, OHRequest, Slot, StoreContent, StoreExt } from "./types-ext";
+import type { Announcement, Attendance, CalendarDay, ContentRow, CourseSettings, Flashcard, Material, Message, MockAttempt, OHRequest, Slot, StoreContent, StoreExt } from "./types-ext";
 import type { SessionContent } from "../content/course";
 import w01d1 from "../../content/week01/w01d1.json";
 import w01d2 from "../../content/week01/w01d2.json";
 import w01d3 from "../../content/week01/w01d3.json";
-export type { Announcement, Attendance, CalendarDay, ContentRow, CourseSettings, Flashcard, Material, Message, OHRequest, Slot } from "./types-ext";
+// Spaced review: fuzzy comes back next session (2 days), got it once in a week, twice in three weeks, then monthly.
+export function scheduleCard(cur: Flashcard | undefined, got: boolean) {
+  const streak = got ? (cur?.streak ?? 0) + 1 : 0;
+  const days = got ? [7, 21, 45][Math.min(streak - 1, 2)] : 2;
+  return { streak, due: new Date(Date.now() + days * 864e5).toISOString() };
+}
+export type { Announcement, Attendance, CalendarDay, ContentRow, CourseSettings, Flashcard, Material, Message, MockAttempt, OHRequest, Slot } from "./types-ext";
 
 export type Role = "student" | "instructor";
 export type Profile = { id: string; email: string; full_name: string; role: Role; created_at: string };
@@ -124,12 +130,21 @@ class SupaStore implements Store {
   async announcements() { const { data } = await this.sb.from("announcements").select("*").order("pinned", { ascending: false }).order("created_at", { ascending: false }); return (data || []) as Announcement[]; }
   async postAnnouncement(a: { title: string; body: string; pinned: boolean }) { await this.sb.from("announcements").insert(a); }
   async deleteAnnouncement(id: number) { await this.sb.from("announcements").delete().eq("id", id); }
-  async flashcards() { const { data } = await this.sb.from("flashcards").select("term_key,status"); return (data || []) as Flashcard[]; }
+  async flashcards() { const { data } = await this.sb.from("flashcards").select("term_key,status,due,streak,obj"); return (data || []) as Flashcard[]; }
+  async rateCard(term_key: string, obj: string, got: boolean) {
+    const { data: { user } } = await this.sb.auth.getUser(); if (!user) return;
+    const cur = (await this.flashcards()).find(f => f.term_key === term_key);
+    const next = scheduleCard(cur, got);
+    const { error } = await this.sb.from("flashcards").upsert({ student_id: user.id, term_key, obj, status: got ? "known" : "review", streak: next.streak, due: next.due, updated_at: new Date().toISOString() }, { onConflict: "student_id,term_key" });
+    if (error) throw error;
+  }
+  async mockAttempts() { const { data } = await this.sb.from("mock_attempts").select("*").order("created_at", { ascending: false }); return (data || []) as MockAttempt[]; }
+  async saveMock(m: MockAttempt) { const { data: { user } } = await this.sb.auth.getUser(); if (!user) return; const { error } = await this.sb.from("mock_attempts").insert({ ...m, student_id: user.id }); if (error) throw error; }
   async setFlashcard(term_key: string, status: "known" | "review" | null) { const { data: { user } } = await this.sb.auth.getUser(); if (!user) return; if (!status) await this.sb.from("flashcards").delete().eq("student_id", user.id).eq("term_key", term_key); else await this.sb.from("flashcards").upsert({ student_id: user.id, term_key, status, updated_at: new Date().toISOString() }, { onConflict: "student_id,term_key" }); }
   // ----- content, materials, attendance -----
   async allContent() { const { data } = await this.sb.from("session_content").select("session_id,content,version_note,updated_at,verified_at,verification"); return (data || []) as ContentRow[]; }
   async saveContent(session_id: string, content: SessionContent, version_note: string) { const { data: { user } } = await this.sb.auth.getUser(); const { error } = await this.sb.from("session_content").upsert({ session_id, content, version_note, updated_at: new Date().toISOString(), updated_by: user?.id, verified_at: null, verification: null }, { onConflict: "session_id" }); if (error) throw error; }
-  async setVerification(session_id: string, v: { checks: Record<string, boolean>; note: string }) { const { data: { user } } = await this.sb.auth.getUser(); await this.sb.from("session_content").update({ verified_at: new Date().toISOString(), verified_by: user?.id, verification: v }).eq("session_id", session_id); }
+  async setVerification(session_id: string, v: { checks: Record<string, boolean>; note: string }) { const { data: { user } } = await this.sb.auth.getUser(); const { error } = await this.sb.from("session_content").update({ verified_at: new Date().toISOString(), verified_by: user?.id, verification: v }).eq("session_id", session_id); if (error) throw error; }
   async materials() { const { data } = await this.sb.from("session_materials").select("*").order("created_at"); return ((data || []) as Material[]).map(m => ({ ...m, url: m.file_path ? this.sb.storage.from("materials").getPublicUrl(m.file_path).data.publicUrl : m.url })); }
   async addMaterial(m: { session_id: string; kind: Material["kind"]; title: string; file?: File; url?: string }) {
     let file_path: string | null = null;
@@ -181,11 +196,12 @@ function seedDemo() {
   const oh: OHRequest[] = [{ id: 1, student_id: "u2", slot_id: 1, requested_at: "2026-10-13T17:00:00", topic: "I keep getting different answers from the three assistants and don't know which to trust.", status: "pending", instructor_note: null, created_at: new Date().toISOString() }, { id: 2, student_id: "u8", slot_id: null, requested_at: "2026-10-14T12:00:00", topic: "Missed Day 2. Can we go over Teachable Machine?", status: "pending", instructor_note: null, created_at: new Date().toISOString() }];
   const msgs: Message[] = [{ id: 1, thread_student_id: "u2", sender_id: "u2", body: "Hi Roland, my Teachable Machine model keeps saying 'mug' for everything. I retrained twice.", created_at: new Date(Date.now() - 3600e3 * 20).toISOString(), read_at: null }, { id: 2, thread_student_id: "u1", sender_id: "u1", body: "Is it okay to use my work's actual sales sheet for the Week 6 lab, or should I use the Bloom & Vine one?", created_at: new Date(Date.now() - 3600e3 * 5).toISOString(), read_at: null }, { id: 3, thread_student_id: "u1", sender_id: "u-instr", body: "Use Bloom & Vine in class so we're all looking at the same numbers. Your own sheet is a great Stretch though.", created_at: new Date(Date.now() - 3600e3 * 4).toISOString(), read_at: null }];
   const anns: Announcement[] = [{ id: 1, title: "Welcome to Software/AI", body: "Before Thursday: make sure you have a Google account and a laptop you can install software on. Bring one task from your job or target job that you'd like AI to help with.", pinned: true, created_at: new Date(Date.now() - 86400e3 * 2).toISOString() }, { id: 2, title: "Office hours are open", body: "Tuesdays 5 to 5:45 PM on Zoom and Thursdays 5:30 PM in the classroom. Book from the Calendar page.", pinned: false, created_at: new Date(Date.now() - 86400e3).toISOString() }];
-  const flashcards: Flashcard[] = [{ term_key: "w01d1|Generative AI", status: "known" }, { term_key: "w01d1|Agentic AI", status: "review" }];
+  const flashcards: Flashcard[] = [{ term_key: "w01d1|c01", status: "known", streak: 1, due: new Date(Date.now() + 5 * 864e5).toISOString(), obj: "1.1.2" }, { term_key: "w01d1|c04", status: "review", streak: 0, due: new Date().toISOString(), obj: "1.2.2" }];
+  const mocks: MockAttempt[] = [{ id: "m1", student_id: "u1", scope: "all", total: 8, correct: 6, scaled: 775, seconds: 410, answers: [], created_at: new Date(Date.now() - 2 * 864e5).toISOString() }];
   const content: ContentRow[] = [["w01d1", w01d1], ["w01d2", w01d2], ["w01d3", w01d3]].map(([id, c], i) => ({ session_id: id as string, content: c as unknown as SessionContent, version_note: "Built Oct 6, 2026", updated_at: new Date(Date.now() - 86400e3).toISOString(), verified_at: i === 0 ? new Date().toISOString() : i === 1 ? new Date(Date.now() - 86400e3 * 4).toISOString() : null, verification: i < 2 ? { checks: { tools: true, links: true, facts: true, quiz: true, guide: true }, note: "Free tiers confirmed on vendor pricing pages." } : null }));
   const materials: Material[] = [{ id: 1, session_id: "w01d1", kind: "student_guide", title: "Week 1 Day 1 Student Guide", file_path: null, url: "#", created_at: new Date().toISOString() }, { id: 2, session_id: "w01d1", kind: "slides", title: "Slides (Gamma)", file_path: null, url: "https://gamma.app", created_at: new Date().toISOString() }];
   const attendance: Attendance[] = [];
-  return { content, materials, attendance, settings, calendar, slots, oh, msgs, anns, flashcards, profiles, progress, grades, submissions, releases, roster: profiles.map(p => ({ email: p.email, full_name: p.full_name as string | null, role: p.role })) };
+  return { content, materials, attendance, settings, calendar, slots, oh, msgs, anns, flashcards, mocks, profiles, progress, grades, submissions, releases, roster: profiles.map(p => ({ email: p.email, full_name: p.full_name as string | null, role: p.role })) };
 }
 
 class DemoStore implements Store {
@@ -247,6 +263,9 @@ class DemoStore implements Store {
   async postAnnouncement(a: { title: string; body: string; pinned: boolean }) { this.d.anns.push({ id: Date.now(), ...a, created_at: new Date().toISOString() }); }
   async deleteAnnouncement(id: number) { this.d.anns = this.d.anns.filter(a => a.id !== id); }
   async flashcards() { return this.me === "u1" ? this.d.flashcards : []; }
+  async rateCard(term_key: string, obj: string, got: boolean) { const cur = this.d.flashcards.find(f => f.term_key === term_key); const next = scheduleCard(cur, got); this.d.flashcards = this.d.flashcards.filter(f => f.term_key !== term_key); this.d.flashcards.push({ term_key, obj, status: got ? "known" : "review", streak: next.streak, due: next.due }); }
+  async mockAttempts() { return this.d.mocks.filter(m => this.me === "instructor" || m.student_id === this.me); }
+  async saveMock(m: MockAttempt) { this.d.mocks.unshift({ ...m, id: String(Date.now()), student_id: this.me ?? "u1", created_at: new Date().toISOString() }); }
   async setFlashcard(term_key: string, status: "known" | "review" | null) { this.d.flashcards = this.d.flashcards.filter(f => f.term_key !== term_key); if (status) this.d.flashcards.push({ term_key, status }); }
   async allContent() { return this.d.content; }
   async saveContent(session_id: string, content: SessionContent, version_note: string) { this.d.content = this.d.content.filter(c => c.session_id !== session_id); this.d.content.push({ session_id, content, version_note, updated_at: new Date().toISOString(), verified_at: null, verification: null }); }
