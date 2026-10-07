@@ -2,7 +2,7 @@
 export type CourseSettings = { start_date: string; class_days: number[] };
 export type CalendarDay = { day: string; kind: "holiday" | "buffer"; label: string | null };
 export type Slot = { id: number; weekday: number; start_time: string; minutes: number; capacity: number; location: string | null; active: boolean };
-export type OHRequest = { id: number; student_id: string; slot_id: number | null; requested_at: string; topic: string; status: "pending" | "accepted" | "declined" | "done" | "cancelled"; instructor_note: string | null; created_at: string };
+export type OHRequest = { id: number; student_id: string; slot_id: number | null; requested_at: string; topic: string; status: "pending" | "accepted" | "declined" | "done" | "cancelled" | "proposed"; instructor_note: string | null; proposed_at?: string | null; created_at: string };
 export type Message = { id: number; thread_student_id: string; sender_id: string; body: string; created_at: string; read_at: string | null };
 export type Announcement = { id: number; title: string; body: string; pinned: boolean; created_at: string };
 export type Flashcard = { term_key: string; status: "known" | "review"; due?: string; streak?: number; obj?: string | null };
@@ -18,7 +18,7 @@ export interface StoreExt {
   deleteSlot(id: number): Promise<void>;
   ohRequests(): Promise<OHRequest[]>;           // own for students, all for instructor
   requestOH(r: { slot_id: number | null; requested_at: string; topic: string }): Promise<void>;
-  updateOH(id: number, patch: Partial<Pick<OHRequest, "status" | "instructor_note">>): Promise<void>;
+  updateOH(id: number, patch: Partial<Pick<OHRequest, "status" | "instructor_note" | "proposed_at" | "requested_at">>): Promise<void>;
   messages(threadStudentId?: string): Promise<Message[]>;
   sendMessage(threadStudentId: string, body: string): Promise<void>;
   markRead(threadStudentId: string): Promise<void>;

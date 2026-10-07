@@ -123,7 +123,7 @@ class SupaStore implements Store {
   async deleteSlot(id: number) { await this.sb.from("office_hour_slots").delete().eq("id", id); }
   async ohRequests() { const { data } = await this.sb.from("office_hour_requests").select("*").order("requested_at"); return (data || []) as OHRequest[]; }
   async requestOH(r: { slot_id: number | null; requested_at: string; topic: string }) { const { data: { user } } = await this.sb.auth.getUser(); if (!user) return; const { error } = await this.sb.from("office_hour_requests").insert({ student_id: user.id, ...r }); if (error) throw error; }
-  async updateOH(id: number, patch: Partial<Pick<OHRequest, "status" | "instructor_note">>) { await this.sb.from("office_hour_requests").update(patch).eq("id", id); }
+  async updateOH(id: number, patch: Partial<Pick<OHRequest, "status" | "instructor_note" | "proposed_at" | "requested_at">>) { const { error } = await this.sb.from("office_hour_requests").update(patch).eq("id", id); if (error) throw error; }
   async messages(threadStudentId?: string) { let q = this.sb.from("messages").select("*").order("created_at"); if (threadStudentId) q = q.eq("thread_student_id", threadStudentId); const { data } = await q; return (data || []) as Message[]; }
   async sendMessage(threadStudentId: string, body: string) { const { data: { user } } = await this.sb.auth.getUser(); if (!user) return; const { error } = await this.sb.from("messages").insert({ thread_student_id: threadStudentId, sender_id: user.id, body }); if (error) throw error; }
   async markRead(threadStudentId: string) { const { data: { user } } = await this.sb.auth.getUser(); if (!user) return; await this.sb.from("messages").update({ read_at: new Date().toISOString() }).eq("thread_student_id", threadStudentId).neq("sender_id", user.id).is("read_at", null); }
@@ -255,7 +255,7 @@ class DemoStore implements Store {
   async deleteSlot(id: number) { this.d.slots = this.d.slots.filter(s => s.id !== id); }
   async ohRequests() { const me = this.d.profiles.find(p => p.id === this.me); return me?.role === "instructor" ? this.d.oh : this.d.oh.filter(r => r.student_id === this.me); }
   async requestOH(r: { slot_id: number | null; requested_at: string; topic: string }) { this.d.oh.push({ id: Date.now(), student_id: this.me!, ...r, status: "pending", instructor_note: null, created_at: new Date().toISOString() }); }
-  async updateOH(id: number, patch: Partial<Pick<OHRequest, "status" | "instructor_note">>) { const r = this.d.oh.find(x => x.id === id); if (r) Object.assign(r, patch); }
+  async updateOH(id: number, patch: Partial<Pick<OHRequest, "status" | "instructor_note" | "proposed_at" | "requested_at">>) { const r = this.d.oh.find(x => x.id === id); if (r) Object.assign(r, patch); }
   async messages(threadStudentId?: string) { const me = this.d.profiles.find(p => p.id === this.me); const t = threadStudentId ?? (me?.role === "instructor" ? undefined : this.me!); return this.d.msgs.filter(m => !t || m.thread_student_id === t); }
   async sendMessage(threadStudentId: string, body: string) { this.d.msgs.push({ id: Date.now(), thread_student_id: threadStudentId, sender_id: this.me!, body, created_at: new Date().toISOString(), read_at: null }); }
   async markRead(threadStudentId: string) { this.d.msgs.forEach(m => { if (m.thread_student_id === threadStudentId && m.sender_id !== this.me && !m.read_at) m.read_at = new Date().toISOString(); }); }
