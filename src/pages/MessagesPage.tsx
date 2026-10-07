@@ -1,36 +1,65 @@
 // Messages: a student sees one private thread with the instructor. The instructor sees an inbox of threads.
 // Announcements: instructor posts class-wide; everyone reads them here and on the course page.
+// Student view (instructor previewing): every tab shows the student layout, with a sample thread and nothing saved.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth";
 import { store, type Announcement, type Message, type NotifyLog, type Profile } from "../lib/store";
 import { initials } from "../lib/logic";
 
 export default function MessagesPage() {
-  const { user, toast } = useAuth();
-  const isInstr = user?.role === "instructor";
+  const { user, toast, mode } = useAuth();
+  const isInstr = user?.role === "instructor" && mode === "instructor";
+  const preview = user?.role === "instructor" && mode === "student";
+  const [roster, setRoster] = useState<{ email: string; full_name: string | null; role: string }[]>([]);
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [anns, setAnns] = useState<Announcement[]>([]);
   const [thread, setThread] = useState<string | null>(isInstr ? null : user!.id);
+  useEffect(() => { setThread(isInstr ? null : user!.id); }, [isInstr]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState<"dm" | "ann" | "email">("dm");
-  const reload = useCallback(async () => { const [m, a] = await Promise.all([store.messages(isInstr ? undefined : user!.id), store.announcements()]); setMsgs(m); setAnns(a); if (isInstr) setProfiles(await store.allProfiles()); }, [isInstr, user]);
+  const reload = useCallback(async () => { const [m, a] = await Promise.all([store.messages(isInstr ? undefined : user!.id), store.announcements()]); setMsgs(m); setAnns(a); if (isInstr) { const [p, r] = await Promise.all([store.allProfiles(), store.roster().catch(() => [])]); setProfiles(p); setRoster(r); } }, [isInstr, user]);
   useEffect(() => { reload(); const t = setInterval(reload, 20000); return () => clearInterval(t); }, [reload]);
-  useEffect(() => { if (thread) store.markRead(thread).then(reload); }, [thread]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (thread && !preview) store.markRead(thread).then(reload); }, [thread]); // eslint-disable-line react-hooks/exhaustive-deps
   const students = profiles.filter(p => p.role === "student");
   const threads = isInstr ? students.map(s => { const tm = msgs.filter(m => m.thread_student_id === s.id); const last = tm[tm.length - 1]; const unread = tm.filter(m => m.sender_id === s.id && !m.read_at).length; return { s, last, unread }; }).sort((a, b) => (b.unread - a.unread) || ((b.last?.created_at || "").localeCompare(a.last?.created_at || ""))) : [];
+  const signedIn = new Set(profiles.map(p => (p.email || "").toLowerCase()));
+  const waiting = isInstr ? roster.filter(r => r.role !== "instructor" && !signedIn.has(r.email.toLowerCase())) : [];
   return (
     <>
       <div className="hero"><div><span className="eyebrow">{isInstr ? `${threads.filter(t => t.unread).length} unread threads` : "Private thread with your instructor"}</span><h1>Messages</h1></div>
         <div className="tabs" style={{ borderBottom: 0 }}><button className={tab === "dm" ? "on" : ""} onClick={() => setTab("dm")}>Direct messages</button><button className={tab === "ann" ? "on" : ""} onClick={() => setTab("ann")}>Announcements</button><button className={tab === "email" ? "on" : ""} onClick={() => setTab("email")}>Email</button></div></div>
-      {tab === "email" ? (isInstr ? <EmailSettings toast={toast} /> : <EmailPrefs toast={toast} />) : tab === "ann" ? <Announcements anns={anns} isInstr={!!isInstr} reload={reload} toast={toast} /> : (
+      {tab === "email" ? (isInstr ? <EmailSettings toast={toast} /> : <EmailPrefs toast={toast} preview={preview} />) : tab === "ann" ? <Announcements anns={anns} isInstr={!!isInstr} reload={reload} toast={toast} /> : (
         <div className="card" style={{ padding: 0, display: "grid", gridTemplateColumns: isInstr ? "minmax(220px, 300px) minmax(0,1fr)" : "1fr", minHeight: 520 }}>
           {isInstr && <div style={{ borderRight: "1px solid var(--line)", overflowY: "auto", maxHeight: "70vh" }}>
             {threads.map(t => <button key={t.s.id} onClick={() => setThread(t.s.id)} className="person" style={{ width: "100%", textAlign: "left", background: thread === t.s.id ? "var(--accent-soft)" : "none", border: 0, padding: "10px 14px", cursor: "pointer" }}>
               <div className="avatar">{initials(t.s.full_name)}</div><div style={{ minWidth: 0 }}><b>{t.s.full_name}</b><div className="small muted" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.last ? t.last.body : "No messages yet"}</div></div>{t.unread > 0 && <span className="pill acc">{t.unread}</span>}
-            </button>)}</div>}
-          {thread ? <Thread thread={thread} msgs={msgs.filter(m => m.thread_student_id === thread)} me={user!.id} other={isInstr ? (profiles.find(p => p.id === thread)?.full_name || "Student") : "Roland"} reload={reload} /> : <div className="empty">Pick a student to read their thread.</div>}
+            </button>)}
+            {waiting.map(r => <div key={r.email} className="person" style={{ padding: "10px 14px", opacity: .55 }} title="They'll appear here after their first sign-in, and you can message them then.">
+              <div className="avatar">{initials(r.full_name || r.email)}</div><div style={{ minWidth: 0 }}><b>{r.full_name || r.email}</b><div className="small muted">Hasn't signed in yet</div></div>
+            </div>)}
+            {!threads.length && !waiting.length && <div className="empty small" style={{ padding: 16 }}>Add students on Class → Roster. They show up here once they're on the roster.</div>}
+          </div>}
+          {preview ? <PreviewThread /> : thread ? <Thread thread={thread} msgs={msgs.filter(m => m.thread_student_id === thread)} me={user!.id} other={isInstr ? (profiles.find(p => p.id === thread)?.full_name || "Student") : "Roland"} reload={reload} /> : <div className="empty">{threads.length ? "Pick a student to read their thread, or message them first." : "No students have signed in yet."}</div>}
         </div>)}
     </>
+  );
+}
+
+// What a student sees, with sample messages. Nothing here is sent or saved.
+function PreviewThread() {
+  const sample = [{ mine: true, body: "Hi Roland, I got stuck on step 3 of the lab. My model keeps calling everything a mug.", at: "Tue 7:42 PM" }, { mine: false, body: "Good catch. Check your backgrounds: if every mug photo is on your desk, it learned the desk. We'll look at it together Thursday.", at: "Tue 8:05 PM" }];
+  return (
+    <div style={{ display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", maxHeight: "70vh" }}>
+      <div className="row between" style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)" }}><b>Roland</b><span className="pill acc">Preview: sample messages</span></div>
+      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        {sample.map((m, i) => <div key={i} style={{ alignSelf: m.mine ? "flex-end" : "flex-start", maxWidth: "min(78%, 560px)", background: m.mine ? "var(--accent)" : "var(--panel-2)", color: m.mine ? "var(--accent-ink)" : "var(--ink)", padding: "9px 12px", borderRadius: 12, borderBottomRightRadius: m.mine ? 4 : 12, borderBottomLeftRadius: m.mine ? 12 : 4 }}><div>{m.body}</div><div className="small" style={{ opacity: .7, marginTop: 3 }}>{m.at}</div></div>)}
+        <p className="small muted" style={{ textAlign: "center", margin: "6px 0 0" }}>Each student has one private thread with you. It opens straight to this view, and they can write first.</p>
+      </div>
+      <div style={{ padding: 12, borderTop: "1px solid var(--line)", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 8 }}>
+        <textarea style={{ minHeight: 44 }} placeholder="Write a message. Enter to send, Shift+Enter for a new line." disabled />
+        <button className="btn" disabled>Send</button>
+      </div>
+    </div>
   );
 }
 
@@ -98,15 +127,16 @@ function EmailSettings({ toast }: { toast: (m: string) => void }) {
   );
 }
 
-function EmailPrefs({ toast }: { toast: (m: string) => void }) {
-  const [optOut, setOptOut] = useState<boolean | null>(null);
-  useEffect(() => { store.notifyPrefs().then(p => setOptOut(p.opt_out)).catch(() => setOptOut(false)); }, []);
+function EmailPrefs({ toast, preview }: { toast: (m: string) => void; preview?: boolean }) {
+  const [optOut, setOptOut] = useState<boolean | null>(preview ? false : null);
+  useEffect(() => { if (preview) return; store.notifyPrefs().then(p => setOptOut(p.opt_out)).catch(() => setOptOut(false)); }, []);
   if (optOut === null) return <div className="empty">Loading…</div>;
   return (
     <div className="card reading stack" style={{ gap: 10 }}>
       <h3>Email notifications</h3>
       <p className="small muted" style={{ margin: 0 }}>When they're on, you get a short email when a session opens, a grade posts, Roland replies, or there's a new announcement. Nothing else, and never marketing.</p>
-      <label className="row" style={{ gap: 10, cursor: "pointer" }}><input type="checkbox" checked={!optOut} onChange={async e => { const v = !e.target.checked; try { await store.setNotifyPrefs(v); setOptOut(v); toast(v ? "You won't get portal emails" : "Portal emails on"); } catch (err) { toast("Couldn't save: " + (err as Error).message); } }} /><span>Email me about course updates</span></label>
+      <label className="row" style={{ gap: 10, cursor: "pointer" }}><input type="checkbox" checked={!optOut} disabled={preview} onChange={async e => { const v = !e.target.checked; try { await store.setNotifyPrefs(v); setOptOut(v); toast(v ? "You won't get portal emails" : "Portal emails on"); } catch (err) { toast("Couldn't save: " + (err as Error).message); } }} /><span>Email me about course updates</span></label>
+      {preview && <p className="small muted" style={{ margin: 0 }}>Preview only. Students can untick this to stop portal emails.</p>}
     </div>
   );
 }
