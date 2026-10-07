@@ -189,7 +189,11 @@ class SupaStore implements Store {
   async portfolioImage(file: Blob) { const { data: { user } } = await this.sb.auth.getUser(); if (!user) throw new Error("Not signed in"); const path = `${user.id}/${Date.now()}.jpg`; const { error } = await this.sb.storage.from("portfolio").upload(path, file, { contentType: "image/jpeg" }); if (error) throw error; return this.sb.storage.from("portfolio").getPublicUrl(path).data.publicUrl; }
   async submissionToPortfolioImage(file_path: string) { const { data, error } = await this.sb.storage.from("submissions").download(file_path); if (error || !data) throw error || new Error("Download failed"); return this.portfolioImage(data); }
   async notify(kind: NotifyKind, payload: Record<string, unknown> = {}) {
-    try { const { data, error } = await this.sb.functions.invoke("notify", { body: { kind, ...payload } }); if (error) return { ok: false, error: error.message }; return (data as { ok: boolean; error?: string; skipped?: string }) || { ok: true }; }
+    try {
+      const { data, error } = await this.sb.functions.invoke("notify", { body: { kind, ...payload } });
+      if (error) return { ok: false, error: await explainFnError(error) };
+      return (data as { ok: boolean; error?: string; skipped?: string }) || { ok: true };
+    }
     catch (e) { return { ok: false, error: (e as Error).message }; }
   }
   async notifyPrefs() { const { data: { user } } = await this.sb.auth.getUser(); if (!user) return { opt_out: false }; const { data } = await this.sb.from("notify_prefs").select("opt_out").eq("student_id", user.id).maybeSingle(); return { opt_out: !!data?.opt_out }; }
@@ -360,6 +364,20 @@ class DemoStore implements Store {
   async notifyPrefs() { return { opt_out: !!this.d.notifyPrefs[this.me!] }; }
   async setNotifyPrefs(opt_out: boolean) { this.d.notifyPrefs[this.me!] = opt_out; }
   async notifyLog() { return this.d.notifyLog; }
+}
+
+// supabase-js hides the function's reply behind "Edge Function returned a non-2xx status code".
+// Read the reply itself and translate the common setup mistakes into plain words.
+async function explainFnError(error: unknown): Promise<string> {
+  const e = error as { message?: string; name?: string; context?: Response };
+  const res = e.context;
+  if (!res || typeof res.status !== "number") return e.name === "FunctionsFetchError" ? "Couldn't reach the notify function. Check it's deployed in Supabase under the exact name notify." : e.message || "Unknown error";
+  let detail = "";
+  try { const t = await res.clone().text(); try { const j = JSON.parse(t); detail = j.error || j.msg || j.message || t; } catch { detail = t; } } catch { /* body already read */ }
+  detail = String(detail || "").slice(0, 300);
+  if (res.status === 404) return "The notify function isn't deployed (404). In Supabase, Edge Functions, create it with the exact name notify.";
+  if (res.status === 401) return `Supabase refused the sign-in (401${detail ? `: ${detail}` : ""}). Open the notify function's Details and turn off "Verify JWT" (the function checks sign-in itself), then try again.`;
+  return `${detail || e.message} (status ${res.status})`;
 }
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
