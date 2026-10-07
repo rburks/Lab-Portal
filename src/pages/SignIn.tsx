@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Logo from "../components/Logo";
 import { store } from "../lib/store";
 
 export default function SignIn() {
@@ -13,7 +14,7 @@ export default function SignIn() {
   return (
     <div className="page">
       <div className="card pad-lg signin stack">
-        <div className="brand"><span className="logo">S/AI</span><b>Software/AI Lab Portal</b></div>
+        <div className="brand"><Logo /><b>Software/AI Portal</b></div>
         <h1>Sign in</h1>
         <p className="muted">Enter the email your instructor added to the roster. We'll send you a sign-in link; no password needed.</p>
         {state === "sent" ? (
