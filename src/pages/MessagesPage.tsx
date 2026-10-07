@@ -2,7 +2,7 @@
 // Announcements: instructor posts class-wide; everyone reads them here and on the course page.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth";
-import { store, type Announcement, type Message, type Profile } from "../lib/store";
+import { store, type Announcement, type Message, type NotifyLog, type Profile } from "../lib/store";
 import { initials } from "../lib/logic";
 
 export default function MessagesPage() {
@@ -12,7 +12,7 @@ export default function MessagesPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [anns, setAnns] = useState<Announcement[]>([]);
   const [thread, setThread] = useState<string | null>(isInstr ? null : user!.id);
-  const [tab, setTab] = useState<"dm" | "ann">("dm");
+  const [tab, setTab] = useState<"dm" | "ann" | "email">("dm");
   const reload = useCallback(async () => { const [m, a] = await Promise.all([store.messages(isInstr ? undefined : user!.id), store.announcements()]); setMsgs(m); setAnns(a); if (isInstr) setProfiles(await store.allProfiles()); }, [isInstr, user]);
   useEffect(() => { reload(); const t = setInterval(reload, 20000); return () => clearInterval(t); }, [reload]);
   useEffect(() => { if (thread) store.markRead(thread).then(reload); }, [thread]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -21,8 +21,8 @@ export default function MessagesPage() {
   return (
     <>
       <div className="hero"><div><span className="eyebrow">{isInstr ? `${threads.filter(t => t.unread).length} unread threads` : "Private thread with your instructor"}</span><h1>Messages</h1></div>
-        <div className="tabs" style={{ borderBottom: 0 }}><button className={tab === "dm" ? "on" : ""} onClick={() => setTab("dm")}>Direct messages</button><button className={tab === "ann" ? "on" : ""} onClick={() => setTab("ann")}>Announcements</button></div></div>
-      {tab === "ann" ? <Announcements anns={anns} isInstr={!!isInstr} reload={reload} toast={toast} /> : (
+        <div className="tabs" style={{ borderBottom: 0 }}><button className={tab === "dm" ? "on" : ""} onClick={() => setTab("dm")}>Direct messages</button><button className={tab === "ann" ? "on" : ""} onClick={() => setTab("ann")}>Announcements</button><button className={tab === "email" ? "on" : ""} onClick={() => setTab("email")}>Email</button></div></div>
+      {tab === "email" ? (isInstr ? <EmailSettings toast={toast} /> : <EmailPrefs toast={toast} />) : tab === "ann" ? <Announcements anns={anns} isInstr={!!isInstr} reload={reload} toast={toast} /> : (
         <div className="card" style={{ padding: 0, display: "grid", gridTemplateColumns: isInstr ? "minmax(220px, 300px) minmax(0,1fr)" : "1fr", minHeight: 520 }}>
           {isInstr && <div style={{ borderRight: "1px solid var(--line)", overflowY: "auto", maxHeight: "70vh" }}>
             {threads.map(t => <button key={t.s.id} onClick={() => setThread(t.s.id)} className="person" style={{ width: "100%", textAlign: "left", background: thread === t.s.id ? "var(--accent-soft)" : "none", border: 0, padding: "10px 14px", cursor: "pointer" }}>
@@ -67,6 +67,46 @@ export function Announcements({ anns, isInstr, reload, toast, compact }: { anns:
         <div className="row between"><div className="row" style={{ gap: 8 }}>{a.pinned && <span className="pill acc">Pinned</span>}<h3>{a.title}</h3></div><div className="row"><span className="small muted">{new Date(a.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>{isInstr && !compact && <button className="btn ghost xs" onClick={async () => { await store.deleteAnnouncement(a.id); await reload(); }}>Delete</button>}</div></div>
         <p style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{a.body}</p></div>)}
       {!anns.length && <div className="empty small">No announcements yet.</div>}
+    </div>
+  );
+}
+
+// ---------- Email notifications ----------
+function EmailSettings({ toast }: { toast: (m: string) => void }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [log, setLog] = useState<NotifyLog[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const load = useCallback(async () => { const st = await store.settings(); setOn(!!st.email_on); setLog(await store.notifyLog().catch(() => [])); }, []);
+  useEffect(() => { load(); }, [load]);
+  if (on === null) return <div className="empty">Loading…</div>;
+  const toggle = async () => { const st = await store.settings(); try { await store.saveSettings({ ...st, email_on: !on }); setOn(!on); toast(!on ? "Email notifications on" : "Email notifications off"); } catch (e) { toast("Couldn't save: " + (e as Error).message); } };
+  const test = async () => { setBusy(true); setResult(null); const r = await store.notify("test"); setResult(r.ok ? (r.skipped || "Sent. Check your inbox (and spam, the first time).") : `Failed: ${r.error}`); setBusy(false); await load(); };
+  return (
+    <div className="stack reading" style={{ gap: 14 }}>
+      <div className="card stack" style={{ gap: 10 }}>
+        <div className="row between"><div><h3>Email notifications</h3><p className="small muted" style={{ margin: "2px 0 0" }}>Students get a short email when a session unlocks, a grade posts, you reply to a message, you review a capstone milestone, or you post an announcement. You get one when a student messages you or requests office hours.</p></div>
+          <button className={`btn ${on ? "ghost" : ""}`} onClick={toggle}>{on ? "Turn off" : "Turn on"}</button></div>
+        <div className="row"><span className={`pill ${on ? "good" : ""}`}>{on ? "On" : "Off"}</span><button className="btn ghost sm" disabled={busy} onClick={test}>{busy ? "Sending…" : "Send me a test email"}</button></div>
+        {result && <div className={result.startsWith("Failed") ? "tip-box small" : "see-box small"}>{result}{result.startsWith("Failed") && <> The setup steps are in the README under "Email notifications".</>}</div>}
+        <div className="small muted">Message emails are limited to one per thread every 30 minutes, so a back-and-forth chat doesn't flood anyone. Students can opt out from this same tab.</div>
+      </div>
+      <div className="card"><h3>Recent sends</h3>
+        {log.length ? <div className="stack" style={{ gap: 4, marginTop: 8 }}>{log.map(l => <div key={l.id} className="row between small" style={{ padding: "5px 0", borderBottom: "1px solid var(--line)" }}><span>{new Date(l.created_at).toLocaleString()} · {l.kind}</span><span className="row" style={{ gap: 6 }}><span className="muted">{l.recipients} recipient{l.recipients === 1 ? "" : "s"}</span><span className={`pill ${l.ok ? "good" : "bad"}`} title={l.error || ""}>{l.ok ? "sent" : "failed"}</span></span></div>)}</div> : <p className="small muted" style={{ margin: "6px 0 0" }}>Nothing sent yet.</p>}
+      </div>
+    </div>
+  );
+}
+
+function EmailPrefs({ toast }: { toast: (m: string) => void }) {
+  const [optOut, setOptOut] = useState<boolean | null>(null);
+  useEffect(() => { store.notifyPrefs().then(p => setOptOut(p.opt_out)).catch(() => setOptOut(false)); }, []);
+  if (optOut === null) return <div className="empty">Loading…</div>;
+  return (
+    <div className="card reading stack" style={{ gap: 10 }}>
+      <h3>Email notifications</h3>
+      <p className="small muted" style={{ margin: 0 }}>When they're on, you get a short email when a session opens, a grade posts, Roland replies, or there's a new announcement. Nothing else, and never marketing.</p>
+      <label className="row" style={{ gap: 10, cursor: "pointer" }}><input type="checkbox" checked={!optOut} onChange={async e => { const v = !e.target.checked; try { await store.setNotifyPrefs(v); setOptOut(v); toast(v ? "You won't get portal emails" : "Portal emails on"); } catch (err) { toast("Couldn't save: " + (err as Error).message); } }} /><span>Email me about course updates</span></label>
     </div>
   );
 }

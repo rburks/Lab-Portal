@@ -527,10 +527,69 @@
       "Answers: all five quiz answers, every checkpoint answer, and all eight exam practice answers re-read and confirmed; each wrong option has a reason",
       "Guide match: steps, Exam Lens, and quiz text identical to the W1D1 Student Guide; Exam Lens notes corrected to name only objectives that are actually tested (AGI and ASI marked not tested)"
     ],
-    "note": "Exam Lens rows 2 and 3 reworded to match official objectives; exam block (14 cards, 8 practice questions) added. No tool, link, or price changes.",
+    "note": "Exam Lens rows 2 and 3 reworded to match official objectives; exam block (14 cards, 8 practice questions) added. No tool, link, or price changes. Rubric added October 7 (four items, 100 points) for the grading drawer.",
     "sources": [
       "https://docs.aws.amazon.com/aws-certification/latest/ai-practitioner-01/aif-01-revisions.html",
       "https://docs.aws.amazon.com/aws-certification/latest/ai-practitioner-01/ai-practitioner-01-domain1.html"
     ]
+  },
+  "rubric": {
+    "items": [
+      {
+        "id": "questions",
+        "label": "Three real questions, asked of all three assistants",
+        "points": 20,
+        "good": [
+          "Your questions came straight from real work, {name}, which is why the answers were worth comparing.",
+          "Good call asking about something you actually need to know, {name}. That's what made the comparison mean something."
+        ],
+        "fix": [
+          "Two of your questions were general enough that any answer sounds right. Next time ask one where you already know the answer, so you can catch a wrong one.",
+          "Your questions were broad. Try one with a checkable fact in it, like a number or a date, and the differences jump out."
+        ]
+      },
+      {
+        "id": "highlights",
+        "label": "At least three highlights of wrong or vague answers, with a reason",
+        "points": 35,
+        "quoteStep": 4,
+        "good": [
+          "You caught a real one, {name}: \"{quote}\" That's exactly the habit this lab is for.",
+          "\"{quote}\" is a great catch, {name}. Most people read right past that kind of mistake."
+        ],
+        "fix": [
+          "Your highlights flag tone and length, not accuracy. Find one claim that's actually false or unsupported and mark that.",
+          "I need three highlights with a reason each. What did one assistant get wrong that another got right?"
+        ]
+      },
+      {
+        "id": "sort",
+        "label": "All eight applications sorted, each with a reason",
+        "points": 30,
+        "good": [
+          "Your reasons on the sort are what I was looking for, {name}. You explained the pattern, not just the label.",
+          "Clean sort, {name}, and the reasons show you're using the 'did a person write the rule' test."
+        ],
+        "fix": [
+          "A few sorts have no reason next to them. The label matters less than why you picked it, so add one line for each.",
+          "Add a reason to every sort. Run each one through the test: did a person write the rule, or did the machine learn it?"
+        ]
+      },
+      {
+        "id": "goal",
+        "label": "Goal tied to one real task; doc submitted",
+        "points": 15,
+        "quoteStep": 0,
+        "good": [
+          "Starting from \"{quote}\" kept the whole lab grounded, {name}.",
+          "Your goal was specific enough to test against, {name}, and the doc shows it."
+        ],
+        "fix": [
+          "Your goal was general. Name the actual task from your job or the job you want, so the comparison means something to you.",
+          "Tie the goal to one real task, not a topic. 'Write my weekly status email' beats 'learn about AI'."
+        ]
+      }
+    ],
+    "allMet": "Everything's here, {name}. If you want more, try the Stretch: ask each assistant what it can't do and fact-check one claim."
   }
 }

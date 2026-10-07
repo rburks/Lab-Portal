@@ -4,7 +4,7 @@ import { useAuth } from "../auth";
 import { useStudentData } from "./useStudentData";
 import { isUnlocked, labPct, sessionState, STATE_LABEL } from "../lib/logic";
 
-export default function MyProgress() {
+export default function MyProgress({ embedded = false }: { embedded?: boolean }) {
   const { user } = useAuth();
   const { progress, subs, grades, releases, loading } = useStudentData();
   if (loading) return <div className="empty">Loading…</div>;
@@ -17,7 +17,7 @@ export default function MyProgress() {
   const weeks = WEEKS.filter(w => SESSIONS.some(s => s.week === w.n && isUnlocked(s.id, user!.id, releases)));
   return (
     <>
-      <div className="hero"><div><span className="eyebrow">{user!.full_name}</span><h1>My progress</h1></div></div>
+      {!embedded && <div className="hero"><div><span className="eyebrow">{user!.full_name}</span><h1>My progress</h1></div></div>}
       <div className="kpis" style={{ marginBottom: 18 }}>
         <div className="kpi"><span className="eyebrow">Labs complete</span><div className="v">{labAvg}%</div><div className="small muted">across {open.length} open sessions</div></div>
         <div className="kpi"><span className="eyebrow">Quiz average</span><div className="v">{quizAvg == null ? "—" : quizAvg + "%"}</div><div className="small muted">best score per session</div></div>

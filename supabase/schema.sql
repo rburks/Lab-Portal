@@ -280,3 +280,144 @@ insert into storage.buckets (id, name, public) values ('materials','materials', 
 create policy "materials upload instructor" on storage.objects for insert to authenticated with check (bucket_id = 'materials' and public.is_instructor());
 create policy "materials delete instructor" on storage.objects for delete to authenticated using (bucket_id = 'materials' and public.is_instructor());
 create policy "materials read all" on storage.objects for select to authenticated using (bucket_id = 'materials');
+
+-- ===================== Added October 6 (exam study guide: spaced flashcards, timed mocks)
+-- Flashcards gain a review schedule. status stays for backwards compatibility; due and streak drive spacing.
+alter table public.flashcards add column if not exists due timestamptz not null default now();
+alter table public.flashcards add column if not exists streak int not null default 0;
+alter table public.flashcards add column if not exists obj text;
+
+-- One row per finished mock. answers: [{id, obj, correct}] so weak objectives can be computed later.
+create table if not exists public.mock_attempts (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.profiles(id) on delete cascade,
+  scope text not null,                 -- 'all' or a domain number as text
+  total int not null,
+  correct int not null,
+  scaled int not null,                 -- estimated 100 to 1000
+  seconds int not null,
+  answers jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+alter table public.mock_attempts enable row level security;
+create policy "mock own" on public.mock_attempts for all to authenticated using (student_id = auth.uid()) with check (student_id = auth.uid());
+create policy "mock instructor read" on public.mock_attempts for select to authenticated using (public.is_instructor());
+
+-- ===================== Added October 7 (office hours: instructor can propose a new time)
+alter table public.office_hour_requests drop constraint if exists office_hour_requests_status_check;
+alter table public.office_hour_requests add constraint office_hour_requests_status_check check (status in ('pending','accepted','declined','done','cancelled','proposed'));
+alter table public.office_hour_requests add column if not exists proposed_at timestamptz;
+
+-- ===================== Added October 7, batch 2 (readiness, showcase, rubrics, capstone, portfolio, email)
+-- Rubric items the instructor ticked when grading.
+alter table public.grades add column if not exists rubric jsonb;
+
+-- Lab showcase: a student shares one of their own submissions with the class. Instructor can hide or feature.
+create table if not exists public.showcase (
+  id bigserial primary key,
+  submission_id bigint not null unique references public.submissions(id) on delete cascade,
+  student_id uuid not null references public.profiles(id) on delete cascade,
+  session_id text not null,
+  caption text,
+  hidden boolean not null default false,
+  featured boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table public.showcase enable row level security;
+drop policy if exists "showcase read" on public.showcase;
+drop policy if exists "showcase own insert" on public.showcase;
+drop policy if exists "showcase own delete" on public.showcase;
+drop policy if exists "showcase instructor" on public.showcase;
+create policy "showcase read" on public.showcase for select to authenticated using (hidden = false or student_id = auth.uid() or public.is_instructor());
+create policy "showcase own insert" on public.showcase for insert to authenticated with check (student_id = auth.uid() and hidden = false and featured = false);
+create policy "showcase own delete" on public.showcase for delete to authenticated using (student_id = auth.uid());
+create policy "showcase instructor" on public.showcase for all to authenticated using (public.is_instructor()) with check (public.is_instructor());
+-- Classmates can read a submission (and its screenshot) only while it's shared and not hidden.
+create or replace function public.is_shared_submission(sub_id bigint) returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.showcase where submission_id = sub_id and hidden = false)
+$$;
+create or replace function public.is_shared_file(path text) returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.showcase sh join public.submissions s on s.id = sh.submission_id where s.file_path = path and sh.hidden = false)
+$$;
+drop policy if exists "submissions shared read" on public.submissions;
+create policy "submissions shared read" on public.submissions for select to authenticated using (public.is_shared_submission(id));
+drop policy if exists "sub read shared" on storage.objects;
+create policy "sub read shared" on storage.objects for select to authenticated using (bucket_id = 'submissions' and public.is_shared_file(name));
+
+-- Capstone: one record per student, plus one row per milestone.
+create table if not exists public.capstones (
+  student_id uuid primary key references public.profiles(id) on delete cascade,
+  title text, stakeholder text, problem text,
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.capstone_milestones (
+  student_id uuid not null references public.profiles(id) on delete cascade,
+  milestone text not null,
+  status text not null default 'not_started' check (status in ('not_started','submitted','revise','approved')),
+  link text, note text, instructor_note text,
+  updated_at timestamptz not null default now(),
+  primary key (student_id, milestone)
+);
+alter table public.capstones enable row level security;
+alter table public.capstone_milestones enable row level security;
+drop policy if exists "capstone own" on public.capstones;
+drop policy if exists "capstone instructor" on public.capstones;
+drop policy if exists "milestone own read" on public.capstone_milestones;
+drop policy if exists "milestone own write" on public.capstone_milestones;
+drop policy if exists "milestone own update" on public.capstone_milestones;
+drop policy if exists "milestone instructor" on public.capstone_milestones;
+create policy "capstone own" on public.capstones for all to authenticated using (student_id = auth.uid()) with check (student_id = auth.uid());
+create policy "capstone instructor" on public.capstones for all to authenticated using (public.is_instructor()) with check (public.is_instructor());
+create policy "milestone own read" on public.capstone_milestones for select to authenticated using (student_id = auth.uid());
+-- Students can only ever set their own milestone to submitted; approving is the instructor's call.
+create policy "milestone own write" on public.capstone_milestones for insert to authenticated with check (student_id = auth.uid() and status = 'submitted');
+create policy "milestone own update" on public.capstone_milestones for update to authenticated using (student_id = auth.uid()) with check (student_id = auth.uid() and status = 'submitted');
+create policy "milestone instructor" on public.capstone_milestones for all to authenticated using (public.is_instructor()) with check (public.is_instructor());
+
+-- Portfolio: readable by anyone on the internet once published.
+create table if not exists public.portfolios (
+  student_id uuid primary key references public.profiles(id) on delete cascade,
+  slug text not null unique check (slug ~ '^[a-z0-9]([a-z0-9-]{1,38}[a-z0-9])$'),
+  published boolean not null default false,
+  display_name text, headline text, bio text, location text,
+  linkedin text, credly text, email_public text,
+  capstone jsonb,
+  items jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.portfolios enable row level security;
+drop policy if exists "portfolio public read" on public.portfolios;
+drop policy if exists "portfolio own" on public.portfolios;
+drop policy if exists "portfolio instructor read" on public.portfolios;
+create policy "portfolio public read" on public.portfolios for select to anon, authenticated using (published = true);
+create policy "portfolio own" on public.portfolios for all to authenticated using (student_id = auth.uid()) with check (student_id = auth.uid());
+create policy "portfolio instructor read" on public.portfolios for select to authenticated using (public.is_instructor());
+insert into storage.buckets (id, name, public) values ('portfolio', 'portfolio', true) on conflict (id) do nothing;
+drop policy if exists "portfolio upload own" on storage.objects;
+drop policy if exists "portfolio delete own" on storage.objects;
+create policy "portfolio upload own" on storage.objects for insert to authenticated with check (bucket_id = 'portfolio' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "portfolio delete own" on storage.objects for delete to authenticated using (bucket_id = 'portfolio' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Email notifications: master switch, per-student opt-out, and a send log written by the notify Edge Function.
+alter table public.course_settings add column if not exists email_on boolean not null default false;
+create table if not exists public.notify_prefs (
+  student_id uuid primary key references public.profiles(id) on delete cascade,
+  opt_out boolean not null default false
+);
+create table if not exists public.notify_log (
+  id bigserial primary key,
+  kind text not null,
+  ref text,
+  recipients int not null default 0,
+  ok boolean not null,
+  error text,
+  created_at timestamptz not null default now()
+);
+alter table public.notify_prefs enable row level security;
+alter table public.notify_log enable row level security;
+drop policy if exists "prefs own" on public.notify_prefs;
+drop policy if exists "prefs instructor read" on public.notify_prefs;
+drop policy if exists "log instructor read" on public.notify_log;
+create policy "prefs own" on public.notify_prefs for all to authenticated using (student_id = auth.uid()) with check (student_id = auth.uid());
+create policy "prefs instructor read" on public.notify_prefs for select to authenticated using (public.is_instructor());
+create policy "log instructor read" on public.notify_log for select to authenticated using (public.is_instructor());

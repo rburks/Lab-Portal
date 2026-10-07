@@ -1,13 +1,15 @@
-import { Link, NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import { store } from "./lib/store";
 import SignIn from "./pages/SignIn";
 import CourseMap from "./pages/CourseMap";
 import SessionPage from "./pages/SessionPage";
 import Instructor from "./pages/Instructor";
-import MyProgress from "./pages/MyProgress";
 import CalendarPage from "./pages/CalendarPage";
 import MessagesPage from "./pages/MessagesPage";
+import MyWork from "./pages/MyWork";
+import Showcase from "./pages/Showcase";
+import { PublicPortfolio } from "./pages/Portfolio";
 import StudyGuide from "./pages/StudyGuide";
 import { useEffect, useState } from "react";
 
@@ -31,8 +33,9 @@ function Shell() {
             <NavLink to="/messages">Messages<Unread /></NavLink>
           </> : <>
             <NavLink to="/" end>Course</NavLink>
-            <NavLink to="/progress">My progress</NavLink>
+            <NavLink to="/progress">My work</NavLink>
             <NavLink to="/study">Exam guide</NavLink>
+            <NavLink to="/showcase">Showcase</NavLink>
             <NavLink to="/calendar">Calendar</NavLink>
             <NavLink to="/messages">Messages<Unread /></NavLink>
           </>}
@@ -49,7 +52,8 @@ function Shell() {
         <Routes>
           <Route path="/" element={instrMode ? <Navigate to="/instructor" replace /> : <CourseMap />} />
           <Route path="/session/:id" element={<SessionPage />} />
-          <Route path="/progress" element={<MyProgress />} />
+          <Route path="/progress" element={<MyWork />} />
+          <Route path="/showcase" element={<Showcase />} />
           <Route path="/study" element={<StudyGuide />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/messages" element={<MessagesPage />} />
@@ -88,5 +92,8 @@ function DemoSwitcher() {
 }
 
 export default function App() {
+  // Public portfolio pages render without the portal chrome and without signing in.
+  const loc = useLocation();
+  if (loc.pathname.startsWith("/p/")) return <AuthProvider><Routes><Route path="/p/:slug" element={<PublicPortfolio />} /></Routes></AuthProvider>;
   return <AuthProvider><Shell /></AuthProvider>;
 }

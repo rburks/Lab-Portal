@@ -1,0 +1,13 @@
+// Capstone milestones, taken from the Final Curriculum (Weeks 16 to 20). Each one names the session where it's built,
+// what to turn in, and what "approved" means. Students submit a link and a note; the instructor approves or asks for a revision.
+export type Milestone = { id: string; title: string; session: string; deliver: string[]; approvedWhen: string };
+
+export const MILESTONES: Milestone[] = [
+  { id: "stakeholder", title: "Stakeholder lined up", session: "w16d3", deliver: ["Who the stakeholder is and their role", "The problem in one sentence, as they'd say it", "Interview date"], approvedWhen: "A real person with a real problem has agreed to an interview." },
+  { id: "proposal", title: "Requirements and proposal", session: "w17d3", deliver: ["One-page requirements summary: the problem in the stakeholder's words, current process, its cost in time or errors, acceptance criteria, who approves", "Pitch: users, workflow, tools, budget, evaluation plan, risks, governance, ROI from the stakeholder's own numbers"], approvedWhen: "The stakeholder agreed to the acceptance criteria, and the pitch solves their problem rather than the one you wanted to build." },
+  { id: "architecture", title: "Architecture and budget", session: "w18d3", deliver: ["System diagram", "Token and time budget per run", "Where logging and human approval sit", "Task list traced to each acceptance criterion"], approvedWhen: "Every acceptance criterion maps to a task, and the budget is realistic." },
+  { id: "core", title: "Core working on budget", session: "w19d1", deliver: ["Main workflow running end to end on test data", "Tokens and seconds per run against the budget", "Working version committed to GitHub"], approvedWhen: "One full path works inside the stated budget." },
+  { id: "eval", title: "Evaluated and red-teamed", session: "w19d2", deliver: ["Eval set of 25 or more cases, including three malformed-input cases", "Red-team log from a partner's attacks", "Fix log with before and after scores, tagged with prompt versions"], approvedWhen: "The worst failure is fixed and the rerun scores prove it." },
+  { id: "handoff", title: "Handoff package", session: "w19d3", deliver: ["Case study: problem, solution, results, risks", "Lifecycle runbook: model dependency, rollback, weekly monitoring, when to rerun evals, owner", "Annotated trace of one full run with cost per step", "Demo video and slides"], approvedWhen: "Someone else could adopt, maintain, and safely change it." },
+  { id: "presentation", title: "Presentation", session: "w20d2", deliver: ["Present to the panel", "Answer questions on accuracy, risk, and cost with evidence"], approvedWhen: "Presented, with evidence behind every claim." },
+];

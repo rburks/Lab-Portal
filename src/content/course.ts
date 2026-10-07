@@ -28,8 +28,13 @@ export type SessionContent = {
   exam?: ExamBlock;
   // Stamped by the build, not by the instructor: when the live checks were run, what was checked, and what changed.
   verified?: Verified;
+  rubric?: Rubric;
 };
 export type Verified = { date: string; checks: string[]; note: string; sources?: string[] };
+// Rubric: 3 to 6 items summing to 100 points. Each item carries two ways to say what worked and two ways to say what to fix,
+// written in the instructor's voice. {name} is the student's first name (always written as ", {name}"); {quote} is their answer to step quoteStep.
+export type RubricItem = { id: string; label: string; points: number; quoteStep?: number; good: string[]; fix: string[] };
+export type Rubric = { items: RubricItem[]; allMet: string };
 export type Session = {
   id: string;            // e.g. "w01d2"
   week: number;
@@ -45,6 +50,7 @@ export type Session = {
   submission?: { prompt: string; kinds: Array<"image" | "link" | "text"> };
   tools?: Tool[];
   exam?: ExamBlock;
+  rubric?: Rubric;
   built: boolean;        // false = shell only; true once content is loaded from the database
 };
 export type Week = { n: number; theme: string; phase: number };
@@ -96,7 +102,7 @@ export const SESSIONS: Session[] = WEEKS.flatMap(w =>
 );
 
 // Content registry: the database holds each session's content; this loads it into the shells above.
-const CONTENT_KEYS: (keyof SessionContent)[] = ["goal", "steps", "stretch", "doneWhen", "lens", "quiz", "sandbox", "submission", "tools", "exam", "verified"];
+const CONTENT_KEYS: (keyof SessionContent)[] = ["goal", "steps", "stretch", "doneWhen", "lens", "quiz", "sandbox", "submission", "tools", "exam", "verified", "rubric"];
 export function applyContent(map: Record<string, SessionContent>) {
   for (const s of SESSIONS) {
     const c = map[s.id];
@@ -137,6 +143,23 @@ export function validateContent(c: unknown): string[] {
     prac.forEach((p, i) => { const k = p as Record<string, unknown>; if (!k.id || !k.obj || !k.q || !Array.isArray(k.a) || typeof k.c !== "number" || !k.why) e.push(`exam.practice[${i}]: needs id, obj, q, a[], c, why`); if (Array.isArray(k.a) && (k.a as unknown[]).length !== 4) e.push(`exam.practice[${i}]: exactly 4 options, like the real exam`); if (Array.isArray(k.a) && typeof k.c === "number" && (k.c < 0 || k.c >= (k.a as unknown[]).length)) e.push(`exam.practice[${i}]: c out of range`); if (k.obj && !objs.includes(String(k.obj))) e.push(`exam.practice[${i}]: obj ${k.obj} is not in exam.objectives`); if (k.wrong && (!Array.isArray(k.wrong) || (k.wrong as unknown[]).length !== (k.a as unknown[])?.length)) e.push(`exam.practice[${i}]: wrong[] must have one line per option (use "" for the correct one)`); });
     const ids = [...cards, ...prac].map(z => String((z as Record<string, unknown>).id)); if (new Set(ids).size !== ids.length) e.push("exam: card and practice ids must be unique within the session");
   }
+  // Rubric for grading: required for every lab.
+  const rb = x.rubric as Record<string, unknown> | undefined;
+  if (!rb || !Array.isArray(rb.items)) e.push("rubric: missing. Every lab needs 3 to 6 rubric items summing to 100 points.");
+  else {
+    const items = rb.items as Record<string, unknown>[];
+    if (items.length < 3 || items.length > 6) e.push("rubric.items: need 3 to 6 items");
+    const total = items.reduce((a, it) => a + (typeof it.points === "number" ? it.points : 0), 0);
+    if (total !== 100) e.push(`rubric.items: points add to ${total}; they must add to 100`);
+    const stepCount = Array.isArray(x.steps) ? (x.steps as unknown[]).length : 0;
+    items.forEach((it, i) => {
+      if (!it.id || !it.label || typeof it.points !== "number" || it.points <= 0) e.push(`rubric.items[${i}]: needs id, label, points above 0`);
+      if (!Array.isArray(it.good) || !(it.good as unknown[]).length || !Array.isArray(it.fix) || !(it.fix as unknown[]).length) e.push(`rubric.items[${i}]: needs at least one good line and one fix line`);
+      if (typeof it.quoteStep === "number" && (it.quoteStep < 0 || it.quoteStep >= stepCount)) e.push(`rubric.items[${i}]: quoteStep ${it.quoteStep} is not a step in this lab`);
+      [...((it.good as string[]) || []), ...((it.fix as string[]) || [])].forEach(t => { if (/\u2014/.test(t)) e.push(`rubric.items[${i}]: no em dashes in feedback lines`); if (t.includes("{quote}") && typeof it.quoteStep !== "number") e.push(`rubric.items[${i}]: uses {quote} but has no quoteStep`); });
+    });
+    if (typeof rb.allMet !== "string" || !rb.allMet) e.push("rubric.allMet: missing (the line used when every item is met)");
+  }
   // Verification stamp from the build. The portal never asks the instructor to verify; the JSON carries proof it was done.
   const v = x.verified as Record<string, unknown> | undefined;
   if (!v || typeof v !== "object") e.push("verified: missing. The build must run the live checks and stamp {date, checks[], note} before this file is importable.");
@@ -161,6 +184,7 @@ export function diffContent(a: SessionContent | undefined, b: SessionContent): s
   (a.quiz || []).forEach((q, i) => { const n = (b.quiz || [])[i]; if (!n || JSON.stringify(q) !== JSON.stringify(n)) out.push(`Quiz question ${i + 1} changed.`); });
   if (JSON.stringify(a.lens) !== JSON.stringify(b.lens)) out.push("Exam Lens terms changed.");
   if (JSON.stringify(a.tools) !== JSON.stringify(b.tools)) out.push("Tools list changed.");
+  if (JSON.stringify(a.rubric) !== JSON.stringify(b.rubric)) out.push(`Rubric changed: ${(b.rubric?.items || []).map(i => `${i.label} (${i.points})`).join("; ") || "removed"}.`);
   if (a.verified?.date !== b.verified?.date) out.push(`Verification stamp: ${a.verified?.date ?? "none"} → ${b.verified?.date ?? "none"}.`);
   if (JSON.stringify(a.exam) !== JSON.stringify(b.exam)) { const ac = a.exam?.cards.length ?? 0, bc = b.exam?.cards.length ?? 0, ap = a.exam?.practice.length ?? 0, bp = b.exam?.practice.length ?? 0; out.push(`Exam block changed: cards ${ac} → ${bc}, practice ${ap} → ${bp}, objectives ${(b.exam?.objectives || []).join(", ") || "none"}.`); }
   if (JSON.stringify(a.doneWhen) !== JSON.stringify(b.doneWhen) || JSON.stringify(a.stretch) !== JSON.stringify(b.stretch)) out.push("Done-when or Stretch changed.");

@@ -18,61 +18,65 @@
       }
     },
     {
-      "label": "Test on 20 new images",
+      "label": "Test on 20 new objects",
+      "why": "A model is only measured on things it has never seen. Twenty fresh trials is enough to see a pattern.",
       "do": [
-        "Open your Teachable Machine project from Day 2 (it's saved in your browser; if not, retrain quickly with two classes).",
-        "Pick one class to be your 'positive'. Show the model 20 objects, 10 positive and 10 not.",
-        "For each, write down what the model said and what was true."
+        "Open Teachable Machine. Your Day 2 project is usually still in the browser; if it's gone, retrain quickly with your same two classes.",
+        "Pick one class to be your 'positive'. Write it down.",
+        "Show the model 20 objects it has not seen before: 10 that are your positive, 10 that aren't. Change angles and backgrounds.",
+        "For each one, write two things: what the model said, and what was true."
       ],
-      "see": "A list of 20 rows: predicted and actual.",
+      "see": "A list of 20 rows with a predicted label and an actual label. Some will disagree.",
+      "tip": "If the webcam button is grey, click the lock icon in the address bar and allow Camera.",
       "checkpoint": {
         "kind": "confirm",
-        "prompt": "I have 20 predicted-versus-actual results written down."
+        "prompt": "I have 20 predicted-versus-actual results written down, 10 positive and 10 not."
       }
     },
     {
       "label": "Build the confusion matrix in Sheets",
-      "why": "The confusion matrix is how every ML team reads a model's mistakes. It's on the exam.",
+      "why": "Four boxes turn 20 messy results into a picture of what kind of right and what kind of wrong.",
       "do": [
-        "Open a new Google Sheet. In A1 type 'Predicted Yes', A2 'Predicted No'. In B0 and C0 (row 1, columns B and C) type 'Actual Yes' and 'Actual No'.",
-        "Count your 20 results into the four cells: True Positive (predicted yes, actual yes), False Positive (predicted yes, actual no), False Negative (predicted no, actual yes), True Negative (predicted no, actual no).",
-        "Check the four cells add to 20."
+        "Open sheets.google.com and start a blank sheet.",
+        "Type 'Actual Yes' in B1 and 'Actual No' in C1. Type 'Predicted Yes' in A2 and 'Predicted No' in A3.",
+        "Count your 20 results into the four cells: B2 is true positives (predicted yes, actual yes), C2 is false positives (predicted yes, actual no), B3 is false negatives (predicted no, actual yes), C3 is true negatives (predicted no, actual no).",
+        "In B4 type =B2+C2+B3+C3. It should say 20."
       ],
-      "see": "A 2 by 2 grid of counts that sums to 20.",
-      "tip": "Mixed up which is which? False Positive is the false alarm. False Negative is the missed case.",
+      "see": "A 2 by 2 grid of counts, and a cell under it showing 20.",
+      "tip": "If B4 doesn't say 20, one result was counted twice or not at all. Walk your 20 rows again.",
       "checkpoint": {
         "kind": "choice",
-        "prompt": "The model said 'Mug' but it was a phone. Which cell?",
+        "prompt": "The model said 'Mug' (your positive) but it was actually a phone. Which box does that go in?",
         "options": [
-          "True Positive",
-          "False Positive",
-          "False Negative",
-          "True Negative"
+          "True positive",
+          "False positive",
+          "False negative",
+          "True negative"
         ],
         "correct": 1,
-        "why": "Predicted yes (mug) when the truth was no: a false positive, the false alarm."
+        "why": "It predicted yes (positive) and the truth was no. A false alarm is a false positive."
       }
     },
     {
       "label": "Write the three formulas",
-      "why": "Formulas update when counts change. Typed numbers don't. That rule carries through the whole course.",
+      "why": "Typing the formula yourself is how the definitions stick. Reading them never does.",
       "do": [
-        "Accuracy: =(TP+TN)/20. Click the TP cell, type +, click TN, close the bracket, divide by 20.",
-        "Precision: =TP/(TP+FP). Of everything it flagged, how many were right.",
-        "Recall: =TP/(TP+FN). Of all the real positives, how many it caught.",
-        "Change one count and watch all three update. Then change it back."
+        "In A6 type 'Accuracy' and in B6 type =(B2+C3)/20. Right answers divided by everything.",
+        "In A7 type 'Precision' and in B7 type =B2/(B2+C2). Of everything it flagged, how many were right.",
+        "In A8 type 'Recall' and in B8 type =B2/(B2+B3). Of all the real positives, how many it caught.",
+        "Now change B2 down by one and B3 up by one. Watch which number moves most. Then change them back."
       ],
-      "see": "Three cells showing decimals between 0 and 1. Changing a count changes them instantly.",
+      "see": "Three decimals between 0 and 1. Moving one count from true positive to false negative drops recall a lot and accuracy only a little.",
       "checkpoint": {
         "kind": "text",
-        "prompt": "Your accuracy, precision, and recall",
-        "placeholder": "Example: Accuracy 0.85, Precision 0.90, Recall 0.80",
-        "minLength": 10
+        "prompt": "Type your three numbers (accuracy, precision, recall) and one sentence: which one moved most when you shifted a count, and why does that make sense?",
+        "minLength": 50,
+        "placeholder": "Accuracy 0.85, precision 0.9, recall 0.8. Recall moved most because I took a real positive the model used to catch and turned it into a miss, and recall only counts the real positives."
       }
     },
     {
       "label": "Make three build-versus-buy calls",
-      "why": "The exam asks this constantly: ready-made AWS service, or train your own?",
+      "why": "The exam asks this constantly: does a ready-made service already do the job, or does the answer live only in your data?",
       "do": [
         "For each problem, decide 'managed service' or 'custom model' and give one reason:",
         "A) Pull text out of 5,000 scanned invoices. B) Predict which of your 300 regular customers will stop ordering next quarter, using your own sales history. C) Transcribe recorded customer calls to text.",
@@ -81,15 +85,15 @@
       "see": "Three decisions with reasons.",
       "checkpoint": {
         "kind": "choice",
-        "prompt": "Problem B (predict which of your customers will leave, from your own history) is best handled by:",
+        "prompt": "Problem B (predict which of your 300 regular customers will stop ordering next quarter, from your own sales history) is best solved with:",
         "options": [
-          "Amazon Textract",
-          "Amazon Transcribe",
-          "A custom model trained on your data",
-          "A spreadsheet formula"
+          "A managed service like Amazon Textract",
+          "A managed service like Amazon Transcribe",
+          "A custom model trained on your data in SageMaker AI",
+          "Amazon Polly"
         ],
         "correct": 2,
-        "why": "No ready-made service knows your customers. This needs a model trained on your own history, for example in SageMaker. A and C are classic managed-service tasks: Textract for documents, Transcribe for speech."
+        "why": "No off-the-shelf service knows your customers. The answer lives only in your own history, so you build. Problems A and C are common tasks (text from documents, speech to text) with managed services ready: Textract and Transcribe."
       }
     },
     {
@@ -123,24 +127,29 @@
   },
   "lens": [
     {
-      "term": "Confusion matrix",
-      "plain": "A 2 by 2 table of right and wrong answers, split by what the model said and what was true.",
-      "exam": "Domain 1: model evaluation metrics."
+      "term": "ML pipeline (AI/ML lifecycle)",
+      "plain": "The ten stages from business goal through data, training, evaluation, deployment, and monitoring. Most of the work happens before training.",
+      "exam": "Domain 1, Objective 1.3.1: describe and differentiate components of an AI/ML pipeline."
     },
     {
-      "term": "Precision vs recall",
-      "plain": "Precision: of the ones it flagged, how many were right. Recall: of the real cases, how many did it catch.",
-      "exam": "Domain 1: precision, recall, F1, AUC."
+      "term": "MLOps",
+      "plain": "Keeping a deployed model alive: experimentation, repeatable processes, scalable systems, managing technical debt, production readiness, monitoring, and retraining when data drifts.",
+      "exam": "Domain 1, Objective 1.3.5: fundamental concepts of ML operations."
     },
     {
-      "term": "ML lifecycle",
-      "plain": "Business goal, data, prepare, train, evaluate, deploy, monitor, repeat.",
-      "exam": "Domain 1: ML pipeline stages and MLOps."
+      "term": "Confusion matrix; accuracy, precision, recall, F1",
+      "plain": "Four boxes (two ways right, two ways wrong). Accuracy is how often right; precision means few false alarms; recall means few missed cases; F1 balances the two.",
+      "exam": "Domain 1, Objective 1.3.6: model performance metrics (accuracy, precision, recall, F1 score). AUC was dropped in exam guide v1.1."
     },
     {
-      "term": "Managed AI service",
-      "plain": "A ready-made model you call, like Rekognition for images or Textract for documents.",
-      "exam": "Domain 1: AWS managed AI services vs custom models in SageMaker."
+      "term": "Business metrics",
+      "plain": "Was the model worth building? Cost per user, development cost, customer feedback, return on investment.",
+      "exam": "Domain 1, Objective 1.3.6: business metrics to evaluate ML models. Also Domain 2, Objective 2.2.4 for generative AI."
+    },
+    {
+      "term": "Managed AWS AI services vs custom models",
+      "plain": "Buy a ready-made service for common jobs (Comprehend, Rekognition, Textract, Transcribe, Translate, Polly, Lex, Personalize). Build in SageMaker AI when only your own data has the answer. Bedrock, Quick, and Kiro cover other pipeline stages.",
+      "exam": "Domain 1, Objectives 1.2.5 (capabilities of managed AI/ML services), 1.3.4 (AWS services for each pipeline stage), and 1.3.2 (sources of models)."
     }
   ],
   "quiz": [
@@ -167,15 +176,15 @@
       "why": "When one class is rare, accuracy can look great while the model is useless. Recall on the rare class is what matters."
     },
     {
-      "q": "Which comes first in the ML lifecycle?",
+      "q": "Which stage comes first in the ML lifecycle?",
       "a": [
-        "Training the model",
+        "Collecting as much data as possible",
         "Defining the business goal",
-        "Deploying to production",
-        "Choosing a GPU"
+        "Choosing an algorithm",
+        "Deploying a prototype"
       ],
       "c": 1,
-      "why": "Every stage after depends on knowing what problem you're solving and how you'll measure success."
+      "why": "The business goal decides what data you need, what success means, and which mistakes you can afford. Everything else follows from it."
     },
     {
       "q": "A company wants to pull text out of scanned invoices and has no ML team. Best choice?",
@@ -191,27 +200,481 @@
     {
       "q": "After a model is deployed, why does it still need monitoring?",
       "a": [
-        "To bill customers",
-        "Because the real-world data can drift away from what it trained on",
-        "To make it faster",
-        "It doesn't; deployment is the last step"
+        "Because AWS requires it",
+        "Because real-world data can drift away from what the model trained on, so its performance decays",
+        "Because models get slower over time",
+        "Because the training data expires after 90 days"
       ],
       "c": 1,
-      "why": "Data drift means the world changes while the model stays the same. Monitoring catches the drop in quality."
+      "why": "Data drift is the core reason. A fraud model trained on old patterns misses new ones. Monitoring catches the decay; retraining fixes it. That's the MLOps cycle."
     }
   ],
   "tools": [
     {
       "name": "Teachable Machine",
       "url": "https://teachablemachine.withgoogle.com",
-      "use": "Test your Day 2 model",
-      "free": "Free, no account needed."
+      "use": "Reopen your Day 2 classifier and test it on 20 new objects.",
+      "free": "Free, no account, in-browser. Checked October 7, 2026."
     },
     {
       "name": "Google Sheets",
       "url": "https://sheets.google.com",
-      "use": "Confusion matrix and formulas",
-      "free": "Free with a Google account."
+      "use": "Build the confusion matrix and compute accuracy, precision, and recall with three formulas.",
+      "free": "Free with any Google account, no card. Checked October 7, 2026."
     }
-  ]
+  ],
+  "exam": {
+    "objectives": [
+      "1.2.5",
+      "1.3.1",
+      "1.3.2",
+      "1.3.4",
+      "1.3.5",
+      "1.3.6"
+    ],
+    "cards": [
+      {
+        "id": "c01",
+        "obj": "1.3.1",
+        "q": "What comes first in an ML project, and why does it matter?",
+        "a": "The business goal. It decides what data you need, what success looks like, and which mistakes you can afford. Projects that start with 'we have data, let's do AI' usually fail.",
+        "term": "Business goal"
+      },
+      {
+        "id": "c02",
+        "obj": "1.3.1",
+        "q": "What are the stages of an ML pipeline, in order?",
+        "a": "Business goal, data collection, exploratory data analysis, preprocessing, feature engineering, training, tuning, evaluation, deployment, monitoring. Most of the effort is before training.",
+        "term": "ML pipeline"
+      },
+      {
+        "id": "c03",
+        "obj": "1.3.1",
+        "q": "What is exploratory data analysis (EDA)?",
+        "a": "Looking at the data before modeling: charts, counts, distributions, surprises, missing values. It's how you find out whether the data can answer the question at all.",
+        "term": "EDA"
+      },
+      {
+        "id": "c04",
+        "obj": "1.3.1",
+        "q": "What is feature engineering?",
+        "a": "Shaping the clues the model will learn from: choosing, combining, or transforming raw inputs into useful signals. For example, turning a timestamp into 'day of week' and 'is holiday'.",
+        "term": "Feature engineering"
+      },
+      {
+        "id": "c05",
+        "obj": "1.3.5",
+        "q": "What is MLOps?",
+        "a": "The discipline of keeping a model alive in production: experimentation with tracking, repeatable processes, scalable systems, managing technical debt, production readiness, monitoring, and retraining.",
+        "term": "MLOps"
+      },
+      {
+        "id": "c06",
+        "obj": "1.3.5",
+        "q": "Why does a deployed model need monitoring and retraining?",
+        "a": "Because the world drifts. The data arriving today slowly stops looking like the data the model trained on, so its performance decays. Monitoring catches the decay; retraining on fresh data fixes it.",
+        "term": "Data drift"
+      },
+      {
+        "id": "c07",
+        "obj": "1.3.6",
+        "q": "Why can a 99.9% accurate model be useless?",
+        "a": "When the thing you care about is rare. If 1 in 1,000 transactions is fraud, a model that always says 'not fraud' is 99.9% accurate and catches nothing. Accuracy hides the failure.",
+        "term": "Accuracy and class imbalance"
+      },
+      {
+        "id": "c08",
+        "obj": "1.3.6",
+        "q": "What are the four boxes of a confusion matrix?",
+        "a": "True positive (flagged it, and it was real), true negative (silent, and nothing there), false positive (a false alarm), false negative (a missed case). Every prediction lands in exactly one.",
+        "term": "Confusion matrix"
+      },
+      {
+        "id": "c09",
+        "obj": "1.3.6",
+        "q": "What does precision measure?",
+        "a": "Of everything the model flagged as positive, how many really were. High precision means few false alarms. Formula: TP / (TP + FP).",
+        "term": "Precision"
+      },
+      {
+        "id": "c10",
+        "obj": "1.3.6",
+        "q": "What does recall measure?",
+        "a": "Of all the real positives, how many the model caught. High recall means few missed cases. Formula: TP / (TP + FN). Medical screening and fraud detection usually care most about recall.",
+        "term": "Recall"
+      },
+      {
+        "id": "c11",
+        "obj": "1.3.6",
+        "q": "What is the F1 score for?",
+        "a": "A single number that balances precision and recall, useful when you need both and the classes are imbalanced. It's the harmonic mean of the two, so one very low value drags it down.",
+        "term": "F1 score"
+      },
+      {
+        "id": "c12",
+        "obj": "1.3.6",
+        "q": "What are business metrics for an ML model, and how do they differ from model metrics?",
+        "a": "Model metrics say how well the model performs (accuracy, precision, recall). Business metrics say whether it was worth building: cost per user, development cost, customer feedback, return on investment.",
+        "term": "Business metrics"
+      },
+      {
+        "id": "c13",
+        "obj": "1.2.5",
+        "q": "Which AWS managed service would you use to pull text and form fields out of scanned documents?",
+        "a": "Amazon Textract. Comprehend is for understanding text meaning and sentiment; Rekognition is for what's in images and video.",
+        "term": "Amazon Textract"
+      },
+      {
+        "id": "c14",
+        "obj": "1.2.5",
+        "q": "Which AWS services handle speech, and in which direction?",
+        "a": "Amazon Transcribe turns speech into text. Amazon Polly turns text into speech. Amazon Lex builds the conversational bot that might use both.",
+        "term": "Transcribe, Polly, Lex"
+      },
+      {
+        "id": "c15",
+        "obj": "1.2.5",
+        "q": "What do Amazon Comprehend, Translate, Rekognition, and Personalize each do?",
+        "a": "Comprehend reads text for meaning, entities, and sentiment. Translate translates between languages. Rekognition identifies objects, faces, and scenes in images and video. Personalize builds recommendation engines.",
+        "term": "Managed AI services"
+      },
+      {
+        "id": "c16",
+        "obj": "1.3.2",
+        "q": "What are the main sources of a model, and when do you pick each?",
+        "a": "Buy a managed service for common jobs. Borrow a pre-trained model (open source, or from SageMaker JumpStart) and adapt it. Build a custom model in SageMaker AI when the answer lives only in your own data.",
+        "term": "Buy, borrow, build"
+      },
+      {
+        "id": "c17",
+        "obj": "1.3.4",
+        "q": "Which AWS service is the workbench for building, training, and deploying custom ML models?",
+        "a": "Amazon SageMaker AI. Inside it, Data Wrangler prepares data, Feature Store shares features, and JumpStart offers pre-trained models.",
+        "term": "Amazon SageMaker AI"
+      },
+      {
+        "id": "c18",
+        "obj": "1.3.4",
+        "q": "How do Amazon Bedrock, Amazon Quick, and Kiro fit into an AI/ML pipeline?",
+        "a": "Bedrock gives access to foundation models when the job needs a large generative model instead of a custom one. Quick lets business users ask their data questions and build dashboards (it grew out of QuickSight). Kiro is AWS's AI coding tool for building the application around the model.",
+        "term": "Bedrock, Quick, Kiro"
+      }
+    ],
+    "practice": [
+      {
+        "id": "p01",
+        "obj": "1.3.1",
+        "q": "A retail company's data team proposes starting an ML project by exporting every table in the data warehouse and 'seeing what the model finds.' According to the AI/ML lifecycle, what should happen first?",
+        "a": [
+          "Collect more data from external sources",
+          "Define the business goal and how success will be measured",
+          "Choose between SageMaker AI and Bedrock",
+          "Deploy a prototype to get user feedback"
+        ],
+        "c": 1,
+        "why": "The business goal comes first. It determines what data matters, what metric defines success, and which errors are acceptable.",
+        "wrong": [
+          "More data without a question is more noise.",
+          "",
+          "Service choice is a deployment-stage decision.",
+          "You can't prototype toward an undefined goal."
+        ]
+      },
+      {
+        "id": "p02",
+        "obj": "1.3.1",
+        "q": "A data scientist is creating a 'days since last purchase' column from raw transaction timestamps before training a churn model. Which pipeline stage is this?",
+        "a": [
+          "Exploratory data analysis",
+          "Feature engineering",
+          "Model evaluation",
+          "Hyperparameter tuning"
+        ],
+        "c": 1,
+        "why": "Transforming raw inputs into useful signals for the model is feature engineering.",
+        "wrong": [
+          "EDA is looking at the data, not building new inputs from it.",
+          "",
+          "Evaluation happens after training, on held-out data.",
+          "Tuning adjusts the model's settings, not the data."
+        ]
+      },
+      {
+        "id": "p03",
+        "obj": "1.3.5",
+        "q": "A bank's fraud model performed well at launch but its detection rate has fallen steadily over eight months as fraud tactics changed. Which MLOps practice addresses this?",
+        "a": [
+          "Increase the model's accuracy threshold",
+          "Monitor for data drift and retrain on recent data",
+          "Switch from real-time to batch inference",
+          "Add more hyperparameters"
+        ],
+        "c": 1,
+        "why": "Performance decay as the real world changes is data drift. Monitoring detects it; retraining on fresh data fixes it.",
+        "wrong": [
+          "Changing a threshold doesn't teach the model new fraud patterns.",
+          "",
+          "Inference mode affects speed and cost, not what the model knows.",
+          "Hyperparameters are tuning settings; they don't update the model's knowledge of the world."
+        ]
+      },
+      {
+        "id": "p04",
+        "obj": "1.3.6",
+        "q": "A hospital's screening model for a serious disease reports 97% accuracy. The disease affects 2% of patients. On review, the model identified only 40% of actual cases. Which metric best exposes this problem?",
+        "a": [
+          "Accuracy",
+          "Precision",
+          "Recall",
+          "Cost per prediction"
+        ],
+        "c": 2,
+        "why": "Recall measures how many real positives were caught. 40% recall means 60% of sick patients were missed, which accuracy hides because most patients are healthy.",
+        "wrong": [
+          "Accuracy is the number that looked fine and hid the problem.",
+          "Precision measures false alarms, not missed cases.",
+          "",
+          "A business metric; it doesn't measure detection."
+        ]
+      },
+      {
+        "id": "p05",
+        "obj": "1.3.6",
+        "q": "An email provider wants its spam filter to almost never move a legitimate email to the spam folder, even if some spam gets through. Which metric should the team prioritize?",
+        "a": [
+          "Recall",
+          "Precision",
+          "Accuracy",
+          "Training time"
+        ],
+        "c": 1,
+        "why": "Burying a real email is a false positive. Precision measures how many flagged emails were truly spam, so high precision means few false alarms.",
+        "wrong": [
+          "Recall would prioritize catching all spam even at the cost of false alarms, the opposite of the goal.",
+          "Accuracy mixes both error types and can hide either.",
+          "",
+          "Not a performance metric."
+        ]
+      },
+      {
+        "id": "p06",
+        "obj": "1.3.6",
+        "q": "A model produced these results on 100 test cases: 30 true positives, 10 false positives, 5 false negatives, 55 true negatives. What is its precision?",
+        "a": [
+          "0.75",
+          "0.85",
+          "0.86",
+          "0.30"
+        ],
+        "c": 0,
+        "why": "Precision = TP / (TP + FP) = 30 / (30 + 10) = 0.75.",
+        "wrong": [
+          "",
+          "0.85 is accuracy: (30 + 55) / 100.",
+          "0.86 is recall: 30 / (30 + 5), rounded.",
+          "0.30 is just the true positive count over 100."
+        ]
+      },
+      {
+        "id": "p07",
+        "obj": "1.3.6",
+        "q": "A company's recommendation model has excellent offline accuracy, but after launch, average revenue per user fell and support tickets rose. Which statement is MOST accurate?",
+        "a": [
+          "The model is fine; business metrics are irrelevant to ML",
+          "The model metrics look good but the business metrics show it isn't delivering value",
+          "Accuracy must be wrong because revenue fell",
+          "The team should increase inference capacity"
+        ],
+        "c": 1,
+        "why": "Model metrics measure the model; business metrics (ROI, revenue per user, customer feedback) measure whether it was worth building. Here they disagree, and the business metrics win.",
+        "wrong": [
+          "Business metrics are the point of the project.",
+          "Accuracy can be correct and the model still unhelpful to the business.",
+          "",
+          "Capacity has nothing to do with a value problem."
+        ]
+      },
+      {
+        "id": "p08",
+        "obj": "1.2.5",
+        "q": "A logistics company receives 5,000 scanned paper invoices a month and wants to extract vendor names, dates, and totals automatically. It has no ML team. Which approach is MOST appropriate?",
+        "a": [
+          "Train a custom computer vision model in SageMaker AI",
+          "Use Amazon Textract",
+          "Use Amazon Comprehend",
+          "Use Amazon Rekognition"
+        ],
+        "c": 1,
+        "why": "Textract is the managed service for extracting text and structured fields from documents. Common task, no ML team: buy.",
+        "wrong": [
+          "Building a custom model for a solved, common task wastes months.",
+          "",
+          "Comprehend analyzes the meaning of text you already have; it doesn't read scans.",
+          "Rekognition identifies objects and scenes in images, not document fields."
+        ]
+      },
+      {
+        "id": "p09",
+        "obj": "1.2.5",
+        "q": "Match the need to the service: a call center wants to convert recorded customer calls to text, then detect each caller's sentiment.",
+        "a": [
+          "Amazon Polly, then Amazon Lex",
+          "Amazon Transcribe, then Amazon Comprehend",
+          "Amazon Rekognition, then Amazon Translate",
+          "Amazon Textract, then Amazon Personalize"
+        ],
+        "c": 1,
+        "why": "Transcribe converts speech to text; Comprehend analyzes that text for sentiment.",
+        "wrong": [
+          "Polly goes the other way (text to speech); Lex builds bots.",
+          "",
+          "Rekognition is for images; Translate is for languages.",
+          "Textract reads documents; Personalize recommends products."
+        ]
+      },
+      {
+        "id": "p10",
+        "obj": "1.3.2",
+        "q": "A mid-size insurer wants to predict which of its own policyholders are likely to file a claim next year, using 15 years of internal claims history. Which approach fits BEST?",
+        "a": [
+          "Amazon Personalize",
+          "Amazon Comprehend",
+          "A custom model trained on the insurer's data in SageMaker AI",
+          "Amazon Translate"
+        ],
+        "c": 2,
+        "why": "The answer lives only in the insurer's own history; no managed service knows its policyholders. Build a custom model.",
+        "wrong": [
+          "Personalize builds product recommendations, not risk predictions.",
+          "Comprehend analyzes text meaning.",
+          "",
+          "Translate converts languages."
+        ]
+      },
+      {
+        "id": "p11",
+        "obj": "1.3.4",
+        "q": "A team wants to prepare and clean training data, store reusable features, and train a custom model, all within one AWS workbench. Which service?",
+        "a": [
+          "Amazon Bedrock",
+          "Amazon SageMaker AI",
+          "Amazon Quick",
+          "Kiro"
+        ],
+        "c": 1,
+        "why": "SageMaker AI is the end-to-end ML workbench; Data Wrangler and Feature Store live inside it.",
+        "wrong": [
+          "Bedrock provides foundation models, not a custom-training workbench.",
+          "",
+          "Quick is for asking business data questions and dashboards.",
+          "Kiro is an AI coding tool for building applications."
+        ]
+      },
+      {
+        "id": "p12",
+        "obj": "1.3.4",
+        "q": "A business analyst with no coding skills wants to ask questions of company sales data in plain English and get charts and reports. Which AWS service fits?",
+        "a": [
+          "Amazon SageMaker AI",
+          "Amazon Quick",
+          "Amazon Textract",
+          "Amazon Bedrock AgentCore"
+        ],
+        "c": 1,
+        "why": "Amazon Quick (the evolution of QuickSight) lets business users query data in natural language and build dashboards and reports.",
+        "wrong": [
+          "SageMaker AI is a developer and data-scientist workbench.",
+          "",
+          "Textract extracts text from documents.",
+          "AgentCore is infrastructure for running AI agents."
+        ]
+      }
+    ],
+    "notTested": [
+      {
+        "term": "AUC (area under the curve)",
+        "why": "Older study material lists AUC as a model metric. Exam guide v1.1 replaced it with precision, recall, and F1. Recognize the term; don't study it for the exam."
+      }
+    ]
+  },
+  "verified": {
+    "date": "2026-10-07",
+    "checks": [
+      "Tools: Teachable Machine confirmed free, no account, in-browser (October 7); Google Sheets free with a Google account, no card",
+      "Links: teachablemachine.withgoogle.com and sheets.google.com open; AWS docs for SageMaker AI, Model Monitor, Data Wrangler, Feature Store, and the AIF-C01 in-scope services page open and are current",
+      "Facts: all eight managed services (Comprehend, Rekognition, Textract, Transcribe, Translate, Polly, Lex, Personalize) confirmed on the official v1.1 in-scope list; Amazon Quick confirmed as the evolution of QuickSight that absorbed Q Business; Kiro confirmed as AWS's spec-driven AI coding tool with a free tier; SageMaker Model Monitor confirmed closed to new customers, so it is named only in the instructor guide as legacy; Data Wrangler (now inside SageMaker Canvas) and Feature Store confirmed current",
+      "Exam alignment: content mapped to AIF-C01 v1.1 objectives 1.2.5, 1.3.1, 1.3.2, 1.3.4, 1.3.5, 1.3.6; AUC removed from exam-facing content because v1.1 replaced it with precision, recall, F1; service examples for 1.3.4 updated to Bedrock, Quick, Kiro, SageMaker AI per v1.1",
+      "Answers: all five quiz answers, every checkpoint, and all twelve exam practice answers re-read and confirmed, including the arithmetic in the precision question; each wrong option has a stated reason",
+      "Guide match: step, Exam Lens, and quiz text identical across the Gamma deck, instructor guide, student guide, and this file"
+    ],
+    "note": "Full rebuild of Day 3: Exam Lens expanded to five terms with objective IDs; exam block added (18 cards, 12 practice); confusion-matrix step now gives exact cell addresses and a sum check; quiz Q3 and Q5 options tightened; AUC moved to not-tested. Rubric added October 7 (four items, 100 points) for the grading drawer.",
+    "sources": [
+      "https://docs.aws.amazon.com/aws-certification/latest/ai-practitioner-01/aif-01-in-scope-services.html",
+      "https://docs.aws.amazon.com/aws-certification/latest/ai-practitioner-01/ai-practitioner-01-domain1.html",
+      "https://docs.aws.amazon.com/sagemaker/latest/dg/model-monitor.html",
+      "https://docs.aws.amazon.com/sagemaker/latest/dg/data-wrangler.html",
+      "https://docs.aws.amazon.com/sagemaker/latest/dg/feature-store.html",
+      "https://atlan.com/know/ai-agent/aws/what-is-amazon-quick-suite/",
+      "https://usagebar.com/blog/kiro-pricing-and-free-tier"
+    ]
+  },
+  "rubric": {
+    "items": [
+      {
+        "id": "matrix",
+        "label": "Confusion matrix sums to 20; metrics are live formulas",
+        "points": 30,
+        "good": [
+          "Your matrix adds up and the formulas are live, {name}, so the numbers move when the counts do.",
+          "Clean sheet, {name}. Four cells that sum to 20 and three real formulas."
+        ],
+        "fix": [
+          "Some of your metric cells are typed numbers, not formulas. Click the cell: the bar should start with =.",
+          "Your three metrics should be formulas so they update. Retype them starting with = and test by changing a count."
+        ]
+      },
+      {
+        "id": "why",
+        "label": "Explains which metric moved most, and why",
+        "points": 30,
+        "quoteStep": 3,
+        "good": [
+          "\"{quote}\" shows the definition landed, {name}.",
+          "You explained why recall moved, {name}, not just that it did: \"{quote}\""
+        ],
+        "fix": [
+          "Tell me why the number moved, not just which one. Recall only counts real positives, so turning a catch into a miss hits it hardest.",
+          "Your sentence names the metric but not the reason. What does recall count that accuracy doesn't?"
+        ]
+      },
+      {
+        "id": "cost",
+        "label": "Costlier mistake chosen and linked to precision or recall",
+        "points": 15,
+        "quoteStep": 0,
+        "good": [
+          "You picked the costlier mistake before computing anything, {name}: \"{quote}\" That's the business-goal habit.",
+          "Good framing up front, {name}. You knew which mistake mattered before the numbers showed up."
+        ],
+        "fix": [
+          "Connect your costlier mistake to a metric. If missed cases hurt more, recall is your number; if false alarms do, precision.",
+          "Say which metric your costlier mistake points to. That link is what the exam keeps asking about."
+        ]
+      },
+      {
+        "id": "buybuild",
+        "label": "Three buy-or-build calls, each with a reason",
+        "points": 25,
+        "good": [
+          "Your buy-or-build reasons are sharp, {name}. You spotted that only your own data could answer the churn question.",
+          "All three calls are right and the reasons are the right ones, {name}."
+        ],
+        "fix": [
+          "Add one reason to each buy-or-build call. The test is whether a ready-made service already does the job, or the answer lives only in your own data.",
+          "Each decision needs its why. 'Textract, because reading invoices is a common job' is the shape I'm after."
+        ]
+      }
+    ],
+    "allMet": "All of it's here, {name}. The Stretch is worth your time: pick a screening scenario and argue how high accuracy could still hide a dangerous model."
+  }
 }

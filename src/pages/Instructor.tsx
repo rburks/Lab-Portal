@@ -6,6 +6,10 @@ import { store, type Attendance, type ContentRow, type Grade, type Profile, type
 import type { OHRequest } from "../lib/store";
 import { ContentPage, AttendancePage } from "./ContentPage";
 import { buildSchedule, iso } from "../lib/schedule";
+import { draftFeedback, scoreFrom } from "../lib/feedback";
+import ExamReadiness from "./ExamReadiness";
+import { InstructorCapstone } from "./Capstone";
+import Showcase from "./Showcase";
 import { computeStats, download, fmtDate, initials, isUnlocked, labPct, sessionState, STATE_LABEL, toCSV, type SessionState, type StudentStat } from "../lib/logic";
 
 type Data = { profiles: Profile[]; progress: Progress[]; subs: Submission[]; grades: Grade[]; releases: Release[]; attendance: Attendance[]; content: ContentRow[] };
@@ -54,22 +58,25 @@ function Dashboard({ d, reload }: { d: Data; reload: () => Promise<void> }) {
 }
 
 // ---------- Class: attendance and roster on one page ----------
+type ClassTab = "attendance" | "roster" | "exam" | "capstone" | "showcase";
+const CLASS_TABS: [ClassTab, string][] = [["attendance", "Attendance"], ["roster", "Roster"], ["exam", "Exam readiness"], ["capstone", "Capstone"], ["showcase", "Showcase"]];
 function ClassPage({ d, reload }: { d: Data; reload: () => Promise<void> }) {
   const loc = useLocation();
   const [isClassDay, setIsClassDay] = useState<boolean | null>(null);
   useEffect(() => { (async () => { const [st, days] = await Promise.all([store.settings(), store.calendarDays()]); const today = iso(new Date()); setIsClassDay(buildSchedule(st, days).some(x => x.kind === "session" && x.date === today)); })(); }, []);
-  const fromUrl = new URLSearchParams(loc.search).get("tab");
-  const [tab, setTab] = useState<"attendance" | "roster" | null>(fromUrl === "roster" || fromUrl === "attendance" ? fromUrl : null);
-  useEffect(() => { if (fromUrl === "roster" || fromUrl === "attendance") setTab(fromUrl); }, [fromUrl]);
+  const fromUrl = new URLSearchParams(loc.search).get("tab") as ClassTab | null;
+  const valid = (t: string | null): t is ClassTab => !!t && CLASS_TABS.some(([k]) => k === t);
+  const [tab, setTab] = useState<ClassTab | null>(valid(fromUrl) ? fromUrl : null);
+  useEffect(() => { if (valid(fromUrl)) setTab(fromUrl); }, [fromUrl]);
   const active = tab ?? (isClassDay == null ? null : isClassDay ? "attendance" : "roster");
   if (!active) return <div className="empty">Loading…</div>;
   return (
     <div className="stack" style={{ gap: 14 }}>
       <div className="row between">
-        <div className="tabs" style={{ borderBottom: 0 }}><button className={active === "attendance" ? "on" : ""} onClick={() => setTab("attendance")}>Attendance</button><button className={active === "roster" ? "on" : ""} onClick={() => setTab("roster")}>Roster</button></div>
-        {isClassDay && active === "roster" && <span className="small muted">Class meets today. Attendance is one tab over.</span>}
+        <div className="tabs" style={{ borderBottom: 0 }}>{CLASS_TABS.map(([k, label]) => <button key={k} className={active === k ? "on" : ""} onClick={() => setTab(k)}>{label}</button>)}</div>
+        {isClassDay && active !== "attendance" && <span className="small muted">Class meets today. Attendance is the first tab.</span>}
       </div>
-      {active === "attendance" ? <AttendancePage /> : <Roster d={d} reload={reload} />}
+      {active === "attendance" ? <AttendancePage /> : active === "roster" ? <Roster d={d} reload={reload} /> : active === "exam" ? <ExamReadiness profiles={d.profiles} /> : active === "capstone" ? <InstructorCapstone profiles={d.profiles} /> : <Showcase embedded />}
     </div>
   );
 }
@@ -199,11 +206,16 @@ function Grid({ d, reload }: { d: Data; reload: () => Promise<void> }) {
 
 function GradeDrawer({ cell, onClose, onSaved }: { cell: Cell; onClose: () => void; onSaved: () => Promise<void> }) {
   const { toast } = useAuth();
+  const s = cell.session;
+  const rubric = s.rubric;
+  const [checked, setChecked] = useState<string[]>(cell.g?.rubric ?? []);
   const [score, setScore] = useState<string>(cell.g?.score != null ? String(cell.g.score) : "");
+  const [scoreTouched, setScoreTouched] = useState(cell.g?.score != null);
   const [fb, setFb] = useState(cell.g?.feedback || "");
   const [busy, setBusy] = useState(false);
-  const s = cell.session;
-  const save = async () => { setBusy(true); await store.saveGrade({ student_id: cell.student.id, session_id: s.id, score: score === "" ? null : Math.max(0, Math.min(100, +score)), feedback: fb }); toast("Grade saved"); await onSaved(); };
+  const toggle = (id: string) => { const next = checked.includes(id) ? checked.filter(x => x !== id) : [...checked, id]; setChecked(next); if (rubric && !scoreTouched) setScore(String(scoreFrom(rubric, next))); };
+  const draft = () => { if (!rubric) return; setFb(draftFeedback(rubric, checked, cell.student.full_name, (cell.p?.responses || {}) as Record<string, unknown>, s.id)); if (!scoreTouched) setScore(String(scoreFrom(rubric, checked))); };
+  const save = async () => { setBusy(true); try { await store.saveGrade({ student_id: cell.student.id, session_id: s.id, score: score === "" ? null : Math.max(0, Math.min(100, +score)), feedback: fb, rubric: rubric ? checked : undefined }); toast("Grade saved"); await onSaved(); } catch (e) { toast("Couldn't save: " + (e as Error).message + (/rubric/.test((e as Error).message) ? " Run the October 7 batch 2 SQL section." : "")); } finally { setBusy(false); } };
   return (
     <>
       <div className="drawer-bg" onClick={onClose} />
@@ -219,10 +231,15 @@ function GradeDrawer({ cell, onClose, onSaved }: { cell: Cell; onClose: () => vo
               {x.kind === "image" ? (x.url ? <a href={x.url} target="_blank" rel="noreferrer"><img src={x.url} alt="Submitted screenshot" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 6 }} /></a> : <span className="muted">Screenshot (open to view)</span>) : x.kind === "link" ? <a href={x.body!} target="_blank" rel="noreferrer" style={{ wordBreak: "break-all" }}>{x.body}</a> : <span style={{ whiteSpace: "pre-wrap" }}>{x.body}</span>}
               <div className="small muted">{new Date(x.created_at).toLocaleString()}</div></div></div>))}
             {!cell.subs.length && <div className="small muted">Nothing submitted yet.</div>}</div></div>
+        {rubric && <div className="stack" style={{ gap: 6 }}>
+          <div className="row between"><span className="eyebrow">Rubric · tick what's there</span><span className="mono small">{scoreFrom(rubric, checked)} / 100</span></div>
+          {rubric.items.map(it => <label key={it.id} className={`step ${checked.includes(it.id) ? "done" : ""}`} style={{ cursor: "pointer" }}><input type="checkbox" checked={checked.includes(it.id)} onChange={() => toggle(it.id)} /><span className="small"><b>{it.label}</b> <span className="muted mono">· {it.points}</span></span></label>)}
+        </div>}
         <div className="stack" style={{ gap: 8 }}>
-          <label className="stack" style={{ gap: 4 }}><span className="eyebrow">Score (0 to 100)</span><input id="g-score" type="number" min={0} max={100} value={score} onChange={e => setScore(e.target.value)} placeholder="Leave blank to keep ungraded" /></label>
-          <label className="stack" style={{ gap: 4 }}><span className="eyebrow">Feedback to the student</span><textarea id="g-fb" value={fb} onChange={e => setFb(e.target.value)} placeholder="One or two specific sentences. What worked, what to try next time." /></label>
-          <div className="row"><button className="btn" onClick={save} disabled={busy}>Save grade</button>{cell.g?.score != null && <button className="btn ghost" onClick={() => { setScore(""); }}>Clear score</button>}</div>
+          <label className="stack" style={{ gap: 4 }}><span className="eyebrow">Score (0 to 100){rubric && !scoreTouched ? " · follows the rubric" : ""}</span><input id="g-score" type="number" min={0} max={100} value={score} onChange={e => { setScore(e.target.value); setScoreTouched(true); }} placeholder="Leave blank to keep ungraded" /></label>
+          <label className="stack" style={{ gap: 4 }}><span className="row between"><span className="eyebrow">Feedback to the student</span>{rubric && <button type="button" className="btn ghost xs" onClick={draft}>Draft from rubric</button>}</span><textarea id="g-fb" rows={5} value={fb} onChange={e => setFb(e.target.value)} placeholder="One or two specific sentences. What worked, what to try next time." /></label>
+          {rubric && <div className="small muted">The draft quotes the student's own checkpoint answer where it can. Edit it before saving; it's a starting point, not the final word.</div>}
+          <div className="row"><button className="btn" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save grade"}</button>{cell.g?.score != null && <button className="btn ghost" onClick={() => { setScore(""); setScoreTouched(true); }}>Clear score</button>}</div>
         </div>
       </aside>
     </>

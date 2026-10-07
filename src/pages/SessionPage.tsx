@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { compressImage, isUnlocked } from "../lib/logic";
 import Sandbox from "../components/Sandbox";
 import GuidedLab from "../components/GuidedLab";
+import { SharePicker } from "./Showcase";
 
 type Tab = "lab" | "sandbox" | "lens" | "quiz" | "submit" | "resources";
 
@@ -39,7 +40,8 @@ export default function SessionPage() {
     <div className="session">
       <div className="row between">
         <div><Link to="/" className="small">← Course</Link><div className="eyebrow" style={{ marginTop: 6 }}>Week {s.week} · Day {s.day}</div><h1>{s.title}</h1></div>
-        {grade?.score != null && <div className="card" style={{ padding: "10px 14px" }}><span className="eyebrow">Graded</span><div className="bignum">{grade.score}</div>{grade.feedback && <p className="small muted" style={{ maxWidth: 320 }}>{grade.feedback}</p>}</div>}
+        {grade?.score != null && <div className="card" style={{ padding: "10px 14px", maxWidth: 380 }}><span className="eyebrow">Graded</span><div className="bignum">{grade.score}</div>{grade.feedback && <p className="small" style={{ margin: "4px 0 0" }}>{grade.feedback}</p>}
+          {s.rubric && grade.rubric && <div className="stack small" style={{ gap: 3, marginTop: 8 }}>{s.rubric.items.map(it => { const ok = grade.rubric!.includes(it.id); return <div key={it.id} className="row" style={{ gap: 6, alignItems: "flex-start", flexWrap: "nowrap" }}><span style={{ color: ok ? "var(--good)" : "var(--mute)" }}>{ok ? "✓" : "○"}</span><span className={ok ? "" : "muted"}>{it.label} <span className="mono muted">· {it.points}</span></span></div>; })}</div>}</div>}
       </div>
       {(s.tools?.length || mats.length > 0) && <div className="row" style={{ gap: 8 }}>
         {mats.filter(m => m.kind === "student_guide").map(m => <a key={m.id} className="btn sm" href={m.url || "#"} target="_blank" rel="noreferrer">📄 Download student guide</a>)}
@@ -100,6 +102,9 @@ function Submit({ s, subs, reload, toast }: { s: Session; subs: Submission[]; re
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [shareId, setShareId] = useState<number | null>(null);
+  const [shared, setShared] = useState<Set<number>>(new Set());
+  useEffect(() => { store.showcase().then(items => setShared(new Set(items.map(i => i.submission_id)))).catch(() => {}); }, [subs.length]);
   const upload = async (files: FileList | null) => {
     if (!files?.length) return; setBusy(true);
     try { for (const f of Array.from(files)) { if (!f.type.startsWith("image/")) continue; const blob = await compressImage(f); await store.addSubmission({ session_id: s.id, kind: "image", file: blob }); } await reload(); toast("Screenshot uploaded"); }
@@ -132,8 +137,13 @@ function Submit({ s, subs, reload, toast }: { s: Session; subs: Submission[]; re
               {x.kind === "image" ? (x.url ? <img src={x.url} alt="Submitted screenshot" style={{ maxHeight: 140, maxWidth: "100%", borderRadius: 6 }} /> : <span className="muted">Screenshot</span>) : x.kind === "link" ? <a href={x.body!} target="_blank" rel="noreferrer" style={{ wordBreak: "break-all" }}>{x.body}</a> : <span style={{ whiteSpace: "pre-wrap" }}>{x.body}</span>}
               <div className="small muted">{new Date(x.created_at).toLocaleString()}</div>
             </div>
-            <button className="btn ghost xs" onClick={async () => { await store.deleteSubmission(x.id); await reload(); }}>Remove</button>
-          </div>))}</div>}
+            <div className="row" style={{ gap: 6 }}>
+              {shared.has(x.id) ? <Link to="/showcase" className="pill acc" style={{ textDecoration: "none" }}>In showcase</Link> : <button className="btn ghost xs" onClick={() => setShareId(shareId === x.id ? null : x.id)}>Share with class</button>}
+              <button className="btn ghost xs" onClick={async () => { await store.deleteSubmission(x.id); await reload(); }}>Remove</button>
+            </div>
+          </div>))}
+        {shareId != null && <SharePicker subs={subs.filter(x => x.id === shareId)} preselect={shareId} onDone={async () => { setShared(new Set([...shared, shareId])); setShareId(null); toast("Shared with the class"); }} />}
+        </div>}
     </div>
   );
 }

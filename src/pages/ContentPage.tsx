@@ -28,7 +28,7 @@ export function ContentPage() {
   const status = (r?: ContentRow) => { if (!r) return { cls: "", label: "No content" }; if (!r.content.verified) return { cls: "bad", label: "No verification stamp" }; const d = Math.floor((Date.now() - new Date(r.content.verified.date + "T12:00:00Z").getTime()) / 86400000); return d <= 7 ? { cls: "good", label: `Checked ${r.content.verified.date}` } : { cls: "warn", label: `Checked ${r.content.verified.date} (${d}d ago)` }; };
   const openForClass = (id: string) => releases.some(r => r.session_id === id && r.student_id === null);
   const earlyFor = (id: string) => releases.filter(r => r.session_id === id && r.student_id).map(r => r.student_id as string);
-  const toggleWeek = async (w: number, on: boolean) => { for (const x of SESSIONS.filter(q => q.week === w)) await store.setRelease(x.id, null, on); await reload(); toast(`Week ${w} ${on ? "unlocked" : "locked"} for the class`); };
+  const toggleWeek = async (w: number, on: boolean) => { for (const x of SESSIONS.filter(q => q.week === w)) await store.setRelease(x.id, null, on); await reload(); if (on) store.notify("unlock", { session_id: `week${w}`, title: `Week ${w}: ${WEEKS.find(x => x.n === w)?.theme ?? ""}` }); toast(`Week ${w} ${on ? "unlocked" : "locked"} for the class`); };
   const exportAll = () => download(`lab-portal-content-${iso(new Date())}.json`, JSON.stringify(Object.fromEntries(rows.map(r => [r.session_id, { ...r.content, _version_note: r.version_note, _updated_at: r.updated_at, _verified_at: r.verified_at }])), null, 2));
   return (
     <div className="stack" style={{ gap: 14 }}>
@@ -69,9 +69,9 @@ function Access({ sel, row, mats, students, openForClass, early, onChange, toast
   const missing = checks.filter(([ok]) => !ok).map(([, l]) => l);
   const setClass = async (on: boolean) => {
     if (on && !ready && !window.confirm(`Not everything is in place: ${missing.join(", ")}. Unlock anyway?`)) return;
-    setBusy(true); try { await store.setRelease(sel, null, on); await onChange(); toast(on ? "Unlocked for the whole class" : "Locked for the class"); } finally { setBusy(false); }
+    setBusy(true); try { await store.setRelease(sel, null, on); await onChange(); if (on) { const ss = SESSIONS.find(x => x.id === sel)!; const r = await store.notify("unlock", { session_id: sel, title: `Week ${ss.week} Day ${ss.day}: ${ss.title}` }); toast(r.ok && !r.skipped ? "Unlocked and the class was emailed" : "Unlocked for the whole class"); } else toast("Locked for the class"); } finally { setBusy(false); }
   };
-  const toggleEarly = async (sid: string) => { const on = !early.includes(sid); setBusy(true); try { await store.setRelease(sel, sid, on); await onChange(); } finally { setBusy(false); } };
+  const toggleEarly = async (sid: string) => { const on = !early.includes(sid); setBusy(true); try { await store.setRelease(sel, sid, on); await onChange(); if (on) { const ss = SESSIONS.find(x => x.id === sel)!; store.notify("unlock", { session_id: sel, title: `Week ${ss.week} Day ${ss.day}: ${ss.title}`, student_ids: [sid] }); } } finally { setBusy(false); } };
   return (
     <div className="card stack" style={{ gap: 10 }}>
       <div className="row between" style={{ alignItems: "flex-start" }}>
@@ -106,7 +106,7 @@ function Importer({ sel, current, onDone, toast }: { sel: string; current?: Sess
       {parsed && parsed.err && <div className="tip-box small"><b>Not valid JSON:</b> {parsed.err}</div>}
       {good && problems.length > 0 && <div className="tip-box small"><b>{problems.length} problem{problems.length === 1 ? "" : "s"} to fix before import:</b><ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{problems.map((p, i) => <li key={i}>{p}</li>)}</ul></div>}
       {good && !problems.length && <>
-        <div className="see-box small"><b>Valid.</b> {good.steps!.length} steps, {good.quiz!.length} quiz questions, {good.lens!.length} Exam Lens terms, {good.tools!.length} tools{good.sandbox ? `, sandbox: ${good.sandbox}` : ""}. Exam block: {good.exam!.cards.length} cards, {good.exam!.practice.length} practice questions, objectives {good.exam!.objectives.join(", ") || "none (not tested)"}.</div>
+        <div className="see-box small"><b>Valid.</b> {good.steps!.length} steps, {good.quiz!.length} quiz questions, {good.lens!.length} Exam Lens terms, {good.tools!.length} tools{good.sandbox ? `, sandbox: ${good.sandbox}` : ""}. Exam block: {good.exam!.cards.length} cards, {good.exam!.practice.length} practice questions, objectives {good.exam!.objectives.join(", ") || "none (not tested)"}. Rubric: {good.rubric!.items.length} items.</div>
         <div className="callout small"><b>Changes vs current:</b><ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{diff.map((d, i) => <li key={i}>{d}</li>)}</ul></div>
         {err && <div className="tip-box small"><b>Import failed:</b> {err}</div>}
         <div className="row"><input id="version-note" placeholder="Version note, e.g. Built Oct 9; revised quiz Q3" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1, minWidth: 220 }} /><button className="btn" disabled={!note.trim()} onClick={async () => { try { await store.saveContent(sel, good, note.trim()); setText(""); setNote(""); await onDone(); toast("Content imported. Verify it before unlocking."); } catch (e) { setErr(describe(e)); } }}>Import</button></div>

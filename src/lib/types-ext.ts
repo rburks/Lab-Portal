@@ -1,5 +1,5 @@
 // Types and store methods for calendar, office hours, messages, announcements, flashcards.
-export type CourseSettings = { start_date: string; class_days: number[] };
+export type CourseSettings = { start_date: string; class_days: number[]; email_on?: boolean };
 export type CalendarDay = { day: string; kind: "holiday" | "buffer"; label: string | null };
 export type Slot = { id: number; weekday: number; start_time: string; minutes: number; capacity: number; location: string | null; active: boolean };
 export type OHRequest = { id: number; student_id: string; slot_id: number | null; requested_at: string; topic: string; status: "pending" | "accepted" | "declined" | "done" | "cancelled" | "proposed"; instructor_note: string | null; proposed_at?: string | null; created_at: string };
@@ -45,4 +45,40 @@ export interface StoreContent {
   deleteMaterial(id: number): Promise<void>;
   attendance(): Promise<Attendance[]>;
   setAttendance(student_id: string, session_id: string, status: Attendance["status"] | null): Promise<void>;
+}
+
+// ---------- October 7 additions: readiness, showcase, rubrics, capstone, portfolio, email ----------
+export type ShowcaseItem = { id: number; submission_id: number; student_id: string; session_id: string; caption: string | null; hidden: boolean; featured: boolean; created_at: string;
+  kind: "image" | "link" | "text"; body: string | null; url?: string; author: string };
+export type CapstoneRow = { student_id: string; title: string | null; stakeholder: string | null; problem: string | null; updated_at?: string };
+export type MilestoneStatus = "not_started" | "submitted" | "revise" | "approved";
+export type MilestoneRow = { student_id: string; milestone: string; status: MilestoneStatus; link: string | null; note: string | null; instructor_note: string | null; updated_at?: string };
+export type PortfolioItem = { title: string; blurb: string; url?: string; image?: string };
+export type Portfolio = { student_id: string; slug: string; published: boolean; display_name: string | null; headline: string | null; bio: string | null; location: string | null; linkedin: string | null; credly: string | null; email_public: string | null; capstone: { title: string; summary: string } | null; items: PortfolioItem[]; updated_at?: string };
+export type NotifyKind = "test" | "unlock" | "announcement" | "grade" | "message" | "oh_request" | "capstone";
+export type NotifyLog = { id: number; kind: string; recipients: number; ok: boolean; error: string | null; created_at: string };
+export type FlashcardRow = { student_id: string; term_key: string; status: string; streak: number | null; obj: string | null };
+
+export interface StoreMore {
+  allMocks(): Promise<MockAttempt[]>;
+  allFlashcards(): Promise<FlashcardRow[]>;
+  showcase(): Promise<ShowcaseItem[]>;
+  share(submission_id: number, caption: string): Promise<void>;
+  unshare(id: number): Promise<void>;
+  moderate(id: number, patch: { hidden?: boolean; featured?: boolean }): Promise<void>;
+  capstones(): Promise<CapstoneRow[]>;                 // own for students, all for instructor
+  saveCapstone(c: Omit<CapstoneRow, "student_id" | "updated_at">): Promise<void>;
+  milestones(): Promise<MilestoneRow[]>;
+  submitMilestone(m: { milestone: string; link: string; note: string }): Promise<void>;
+  reviewMilestone(m: { student_id: string; milestone: string; status: MilestoneStatus; instructor_note: string }): Promise<void>;
+  myPortfolio(): Promise<Portfolio | null>;
+  allPortfolios(): Promise<Portfolio[]>;
+  savePortfolio(p: Omit<Portfolio, "student_id" | "updated_at">): Promise<void>;
+  publicPortfolio(slug: string): Promise<Portfolio | null>;
+  portfolioImage(file: Blob): Promise<string>;           // upload, returns public URL
+  submissionToPortfolioImage(file_path: string): Promise<string>;
+  notify(kind: NotifyKind, payload?: Record<string, unknown>): Promise<{ ok: boolean; error?: string; skipped?: string }>;
+  notifyPrefs(): Promise<{ opt_out: boolean }>;
+  setNotifyPrefs(opt_out: boolean): Promise<void>;
+  notifyLog(): Promise<NotifyLog[]>;
 }

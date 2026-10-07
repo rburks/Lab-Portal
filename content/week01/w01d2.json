@@ -1,6 +1,6 @@
 {
   "sandbox": "classifier",
-  "goal": "Decide what two things your classifier will tell apart. Pick something you can photograph right now (two kinds of objects on your desk work well).",
+  "goal": "What two things will your classifier tell apart? Pick two objects you can photograph at your desk right now, and avoid things that only differ by color.",
   "steps": [
     {
       "label": "Try the sandbox first",
@@ -27,19 +27,20 @@
       }
     },
     {
-      "label": "Label photos with a partner",
-      "why": "Labels are human decisions. You're about to find out how fuzzy they are.",
+      "label": "Label 20 outfits with a partner",
+      "why": "Labels feel objective until two people label the same photos. This is where you find out they're decisions.",
       "do": [
-        "Pair up. Your instructor will share a folder of 20 photos.",
-        "Without talking, each of you writes a label for every photo (for example 'formal' or 'casual').",
-        "Compare lists. Count how many you disagreed on."
+        "Pair up. Your instructor will put the 20-outfit deck on the screen, one photo at a time.",
+        "Without talking, each of you writes F (formal) or C (casual) for every number, 1 to 20.",
+        "Compare lists. Count how many numbers you disagreed on.",
+        "Pick one you disagreed on and each say, in one sentence, why you chose your label."
       ],
-      "see": "Two lists of 20 labels and a disagreement count.",
+      "see": "Two lists of 20 letters and a disagreement count. Most pairs disagree on 3 to 7.",
       "checkpoint": {
         "kind": "text",
-        "prompt": "How many of 20 did you disagree on, and give one example",
-        "placeholder": "Example: 4. We disagreed on photo 7; I said casual, she said formal because of the shoes.",
-        "minLength": 15
+        "prompt": "How many of the 20 did you disagree on? Give one example and say who you think should decide the right label when two sensible people disagree.",
+        "minLength": 60,
+        "placeholder": "We disagreed on 5. Number 12 (blazer with jeans): I said formal because of the blazer, my partner said casual because of the jeans. The person who will use the model should decide, and write the rule down."
       }
     },
     {
@@ -96,28 +97,31 @@
     },
     {
       "label": "Break it on purpose with skewed data",
-      "why": "Seeing a model fail is the fastest way to understand what it learned.",
+      "why": "A model learns the easiest pattern that separates the classes. Tonight you'll hand it a shortcut and watch it take it.",
       "do": [
-        "Click the three dots on your first class and choose Delete all samples.",
-        "Re-record it in ONE spot only: same background, same lighting, same angle.",
-        "Train again. Then test that object from a different spot in the room."
+        "Click the three dots on each class and choose Delete all samples.",
+        "Re-record your first object with every photo on a dark background (a dark jacket, a dark desk, a bag) and your second object with every photo on a light background (white paper, a bright wall).",
+        "Click Train Model again.",
+        "Now hold your second object over the dark background. Watch which class wins."
       ],
-      "see": "Confidence collapses or flips when you move. The model learned the spot, not the object.",
+      "see": "The confidence bar swings to the first object even though you're holding the second one. The model learned dark background means object A.",
+      "tip": "If it still gets it right, your two backgrounds weren't different enough, or you moved the object around too much. Make the trap stronger: same spot, same lighting, one background per class.",
       "checkpoint": {
         "kind": "text",
-        "prompt": "Write one sentence explaining the failure. Name the shortcut the model learned.",
-        "placeholder": "Example: It learned 'brown desk' means mug because every mug photo had the desk behind it.",
-        "minLength": 20
+        "prompt": "Write one sentence explaining the failure. Name the shortcut the model actually learned instead of your object.",
+        "minLength": 40,
+        "placeholder": "The model learned that a dark background means mug, because every mug photo had one, so it never needed to look at the mug."
       }
     },
     {
       "label": "Add a third class and five edge cases",
       "do": [
-        "Click Add a class. Name it and record varied samples.",
-        "Train. Then test five edge cases: odd angle, partly hidden, far away, a lookalike object, a drawing of the object.",
-        "Note which ones fool it."
+        "Click Add a class. Name it after a third object and record 30 or more varied photos: different angles, distances, and backgrounds.",
+        "Click Train Model.",
+        "Test five edge cases: both objects in frame, an object half out of frame, an object upside down, a similar object it never saw, and an empty background.",
+        "Note which ones it got wrong and what the confidence bars did."
       ],
-      "see": "At least one edge case gets the wrong answer.",
+      "see": "At least one edge case gets the wrong answer. On the empty background it still picks a class; it has no 'none of these' option.",
       "checkpoint": {
         "kind": "text",
         "prompt": "Which edge cases fooled it?",
@@ -135,9 +139,9 @@
       "see": "Four short answers.",
       "checkpoint": {
         "kind": "text",
-        "prompt": "Your data sheet",
-        "placeholder": "Saw: ...\nNever saw: ...\nWould fool it: ...\nFix: ...",
-        "minLength": 60
+        "prompt": "Your data sheet, four parts: (1) what data the model saw, (2) what it never saw, (3) three inputs that would fool it, (4) what training data would fix each of the three.",
+        "minLength": 200,
+        "placeholder": "Saw: a blue mug and a black pen, on my desk, from about 40 photos each, mostly from the front in lamp light. Never saw: other mugs, daylight, the pen with its cap off... Fools: a white mug (fix: add mugs of other colors)..."
       }
     },
     {
@@ -154,13 +158,14 @@
     }
   ],
   "stretch": [
-    "Collect a balanced retraining set and prove the five edge cases pass",
-    "Sort four scenarios into real-time, serverless, asynchronous, or batch inference"
+    "Collect a balanced retraining set (both objects on both backgrounds), retrain, and prove with the same five edge cases that the failures went away.",
+    "Sort these four into real-time, serverless, asynchronous, or batch inference and defend each pick: a fraud check as the card is swiped; an internal tool a few staff use a few times an hour; analyzing a 500-page contract someone uploads; re-scoring every customer every Sunday night."
   ],
   "doneWhen": [
     "A trained model with three classes",
-    "A written failure sentence and a completed data sheet",
-    "Screenshot submitted"
+    "A written failure sentence naming the shortcut the model learned",
+    "A completed four-part data sheet",
+    "A screenshot of the Preview panel with a prediction uploaded"
   ],
   "submission": {
     "prompt": "Upload a screenshot of your trained model's preview.",
@@ -171,24 +176,29 @@
   },
   "lens": [
     {
-      "term": "Supervised learning",
-      "plain": "Learning from examples that come with the right answer attached.",
-      "exam": "Domain 1: supervised vs unsupervised vs reinforcement learning."
+      "term": "Supervised, unsupervised, reinforcement learning",
+      "plain": "Learning with an answer key, learning without one by finding groups, and learning from rewards.",
+      "exam": "Domain 1, Objective 1.1.5: describe different types of AI/ML learning. Objective 1.2.3 pairs them with regression, classification, and clustering."
     },
     {
-      "term": "Training vs inference",
-      "plain": "Training is learning from data. Inference is using what was learned on new data.",
-      "exam": "Domain 1: training and inference; real-time, serverless, asynchronous, and batch inference on AWS."
+      "term": "Training vs inferencing",
+      "plain": "Training is the model studying the examples. Inferencing is the trained model answering on new input, every time anyone uses it.",
+      "exam": "Domain 1, Objective 1.1.1: training and inferencing are listed as basic terms to define."
     },
     {
-      "term": "Overfitting",
-      "plain": "Memorizing the training examples instead of learning the pattern, so new data fails.",
-      "exam": "Domain 1: overfitting and underfitting."
+      "term": "Real-time, serverless, asynchronous, batch inference",
+      "plain": "Now, now-but-sleeps-when-idle, soon-for-big-requests, and overnight-for-the-whole-pile.",
+      "exam": "Domain 1, Objective 1.1.3: describe various types of inferencing. Expect a scenario and 'which one fits'."
     },
     {
-      "term": "Labeled data",
-      "plain": "Data where a human has already marked the correct answer.",
-      "exam": "Domain 1: labeled vs unlabeled, structured vs unstructured data."
+      "term": "Data types: labeled and unlabeled, structured and unstructured, tabular, time series, image, text",
+      "plain": "Does each example come with the answer? Is it rows and columns or free-form? A spreadsheet, a measurement over time, a photo, or words.",
+      "exam": "Domain 1, Objective 1.1.4: describe the different types of data in AI models."
+    },
+    {
+      "term": "Overfitting and underfitting (bias and variance)",
+      "plain": "Overfit memorized the practice test and fails the real one. Underfit never studied and fails both. High variance vs high bias.",
+      "exam": "Domain 4, Objective 4.1.6: describe effects of bias and variance, including overfitting and underfitting. Also shows up in Domain 1 model-evaluation questions."
     }
   ],
   "quiz": [
@@ -206,13 +216,13 @@
     {
       "q": "Which type of learning uses examples that already have the correct answer attached?",
       "a": [
-        "Unsupervised",
-        "Reinforcement",
-        "Supervised",
-        "Generative"
+        "Unsupervised learning",
+        "Reinforcement learning",
+        "Supervised learning",
+        "Generative learning"
       ],
       "c": 2,
-      "why": "Supervised learning trains on labeled examples. Unsupervised finds groups without labels."
+      "why": "Supervised learning trains on labeled examples. Unsupervised finds groups without labels. Reinforcement learns from rewards. 'Generative' isn't a type of learning at all; it's a thing a trained model can do."
     },
     {
       "q": "A model scores 99% on its training photos and 60% on new photos. What's the most likely problem?",
@@ -237,23 +247,417 @@
       "why": "Labels encode judgment. If the labelers disagree, the model inherits that fuzziness."
     },
     {
-      "q": "A bank wants fraud scores the instant a card is swiped. Which inference style fits?",
+      "q": "A bank wants a fraud score the instant a card is swiped. Which inference option fits?",
       "a": [
-        "Batch",
-        "Asynchronous",
-        "Real-time",
-        "Weekly"
+        "Batch transform",
+        "Asynchronous inference",
+        "Real-time inference",
+        "Serverless inference, because it's cheaper"
       ],
       "c": 2,
-      "why": "Real-time inference returns an answer immediately. Batch runs on a schedule over many records."
+      "why": "Real-time inference returns an answer in milliseconds and stays on. Serverless also answers fast but can have a cold-start delay after idle time, which a card swipe can't afford. Asynchronous queues the request. Batch runs on a schedule."
     }
   ],
   "tools": [
     {
       "name": "Teachable Machine",
       "url": "https://teachablemachine.withgoogle.com",
-      "use": "Train your image classifier",
-      "free": "Free, no account needed."
+      "use": "Train a two- or three-class image classifier from your webcam in the browser, no code.",
+      "free": "Free, no account needed. Training runs in your browser so photos stay on your laptop. Optional Google sign-in only if you want to save the project to Drive. Checked October 7, 2026."
     }
-  ]
+  ],
+  "exam": {
+    "objectives": [
+      "1.1.1",
+      "1.1.3",
+      "1.1.4",
+      "1.1.5",
+      "1.2.3",
+      "4.1.6"
+    ],
+    "cards": [
+      {
+        "id": "c01",
+        "obj": "1.1.5",
+        "q": "What is supervised learning?",
+        "a": "Learning from examples that come with the right answer attached. The model guesses, checks the label, adjusts, and repeats. Spam filters, fraud flags, and photo tagging are supervised.",
+        "term": "Supervised learning"
+      },
+      {
+        "id": "c02",
+        "obj": "1.1.5",
+        "q": "What is unsupervised learning?",
+        "a": "Learning from data with no labels. The model looks for natural groups on its own, like sorting a million shoppers into segments nobody named in advance. The exam word for the main technique is clustering.",
+        "term": "Unsupervised learning"
+      },
+      {
+        "id": "c03",
+        "obj": "1.1.5",
+        "q": "What is reinforcement learning?",
+        "a": "Learning from rewards and penalties instead of an answer key. The system tries an action, sees the result, and does more of what paid off. Game-playing AI and robots learning to walk use it.",
+        "term": "Reinforcement learning"
+      },
+      {
+        "id": "c04",
+        "obj": "1.1.5",
+        "q": "Is generative AI a fourth type of machine learning?",
+        "a": "No. Supervised, unsupervised, and reinforcement are ways a machine learns. Generative AI is something a model can do once trained, and chat assistants were trained using all three. If a question lists it beside the learning types, it's the distractor.",
+        "term": "GenAI vs learning types"
+      },
+      {
+        "id": "c05",
+        "obj": "1.2.3",
+        "q": "Which technique fits a problem with no labels where you want to discover groups?",
+        "a": "Clustering. Classification needs known categories to assign; regression predicts a number. Clustering is for when the categories don't exist yet and you want the data to suggest them.",
+        "term": "Clustering"
+      },
+      {
+        "id": "c06",
+        "obj": "1.1.1",
+        "q": "What's the difference between training and inferencing?",
+        "a": "Training is the model studying examples and adjusting itself: slow, costly, done once or occasionally. Inferencing is the trained model answering on new input: fast, cheap, every time anyone uses it. Asking a chat assistant a question is inference.",
+        "term": "Training vs inferencing"
+      },
+      {
+        "id": "c07",
+        "obj": "1.1.3",
+        "q": "When would you choose real-time inference?",
+        "a": "When you need an answer in milliseconds and the endpoint must always be on, like a fraud check as a card is swiped or a product recommendation as a page loads.",
+        "term": "Real-time inference"
+      },
+      {
+        "id": "c08",
+        "obj": "1.1.3",
+        "q": "When would you choose serverless inference?",
+        "a": "When traffic is bursty with idle gaps and a short cold-start delay is acceptable. It scales to zero when nobody's using it, so you don't pay for an always-on server. An internal tool used a few times an hour.",
+        "term": "Serverless inference"
+      },
+      {
+        "id": "c09",
+        "obj": "1.1.3",
+        "q": "When would you choose asynchronous inference?",
+        "a": "When requests are large or slow (up to about 1 GB and up to an hour of processing) and near-real-time is fine. You drop off the request and pick up the result, like analyzing a 500-page PDF.",
+        "term": "Asynchronous inference"
+      },
+      {
+        "id": "c10",
+        "obj": "1.1.3",
+        "q": "When would you choose batch inference?",
+        "a": "When you want predictions for a whole dataset at once and don't need a live endpoint, like re-scoring every customer in the database every Sunday night. In SageMaker AI this is a batch transform job.",
+        "term": "Batch inference"
+      },
+      {
+        "id": "c11",
+        "obj": "1.1.4",
+        "q": "What's the difference between structured and unstructured data?",
+        "a": "Structured data fits rows and columns, like a spreadsheet or database table. Unstructured data is free-form: text, images, audio, video. Most of the world's data is unstructured, and deep learning is what made it usable.",
+        "term": "Structured vs unstructured"
+      },
+      {
+        "id": "c12",
+        "obj": "1.1.4",
+        "q": "What does 'labeled data' mean, and why does it matter?",
+        "a": "Each example comes with the correct answer already marked by a person. Labeled data makes supervised learning possible. Labels are human decisions, so a model inherits every inconsistency in how people labeled.",
+        "term": "Labeled vs unlabeled"
+      },
+      {
+        "id": "c13",
+        "obj": "1.1.4",
+        "q": "What is time-series data?",
+        "a": "Measurements taken in order over time, like daily sales, hourly temperature, or a heartbeat trace. The order matters, which is why forecasting models treat it differently from a plain table.",
+        "term": "Time series"
+      },
+      {
+        "id": "c14",
+        "obj": "4.1.6",
+        "q": "What is overfitting, and what does it look like in the numbers?",
+        "a": "The model memorized the specifics of its training data instead of learning the general pattern. The tell is a big gap: very high accuracy on training data, much lower on new data. In exam language, high variance. The usual fix is more varied data.",
+        "term": "Overfitting"
+      },
+      {
+        "id": "c15",
+        "obj": "4.1.6",
+        "q": "What is underfitting?",
+        "a": "The model is too simple or saw too little data to find the pattern at all, so it does badly on training data and new data alike. In exam language, high bias. Fixes include a more capable model, better features, or more training.",
+        "term": "Underfitting"
+      },
+      {
+        "id": "c16",
+        "obj": "4.1.6",
+        "q": "Why do you hold back a test set?",
+        "a": "To measure how the model does on data it has never seen. Testing on training data only tells you how well it memorized. The gap between training and test performance is how you catch overfitting.",
+        "term": "Train, validation, test split"
+      }
+    ],
+    "practice": [
+      {
+        "id": "p01",
+        "obj": "1.1.5",
+        "q": "A retailer has a year of purchase records but no customer categories. Marketing wants to discover natural customer groups to target. Which type of machine learning is this?",
+        "a": [
+          "Supervised learning",
+          "Unsupervised learning",
+          "Reinforcement learning",
+          "Generative AI"
+        ],
+        "c": 1,
+        "why": "No labels and a goal of finding groups the data suggests: unsupervised learning, specifically clustering.",
+        "wrong": [
+          "Supervised needs labeled examples. There are no categories to learn from.",
+          "",
+          "Reinforcement learns from rewards for actions. Nothing here is acting.",
+          "Generative AI is not a type of learning. It's a distractor on this kind of question."
+        ]
+      },
+      {
+        "id": "p02",
+        "obj": "1.1.5",
+        "q": "A company trains a model on 50,000 past insurance claims, each already marked 'legitimate' or 'fraudulent,' so it can flag new claims. Which learning type and technique is this?",
+        "a": [
+          "Unsupervised learning, clustering",
+          "Supervised learning, classification",
+          "Reinforcement learning, classification",
+          "Supervised learning, regression"
+        ],
+        "c": 1,
+        "why": "Each example has a label (legitimate or fraudulent), and the output is one of two categories: supervised classification.",
+        "wrong": [
+          "There are labels, so it's not unsupervised, and the categories are already known.",
+          "",
+          "Reinforcement learning uses rewards from actions, not a labeled dataset.",
+          "Regression predicts a number. This predicts a category."
+        ]
+      },
+      {
+        "id": "p03",
+        "obj": "1.1.3",
+        "q": "A payment processor must decide whether to approve a card transaction within 200 milliseconds while the customer waits at the register. Which SageMaker AI inference option is MOST appropriate?",
+        "a": [
+          "Batch transform",
+          "Asynchronous inference",
+          "Real-time inference",
+          "Serverless inference"
+        ],
+        "c": 2,
+        "why": "A hard latency requirement with the user waiting calls for an always-on real-time endpoint.",
+        "wrong": [
+          "Batch runs on a whole dataset on a schedule. The customer would be long gone.",
+          "Asynchronous queues the request and returns later. Too slow for a register.",
+          "",
+          "Serverless can cold-start after idle periods, adding seconds of delay. A card swipe can't absorb that."
+        ]
+      },
+      {
+        "id": "p04",
+        "obj": "1.1.3",
+        "q": "A law firm's tool lets staff upload contracts of several hundred pages for AI analysis. Each request can take several minutes to process, and a result within 10 minutes is acceptable. Which inference option fits BEST?",
+        "a": [
+          "Real-time inference",
+          "Serverless inference",
+          "Asynchronous inference",
+          "Batch transform"
+        ],
+        "c": 2,
+        "why": "Large payloads and long processing with near-real-time (not instant) expectations is exactly what asynchronous inference is designed for.",
+        "wrong": [
+          "Real-time endpoints time out on multi-minute requests and have payload limits.",
+          "Serverless also has payload and duration limits that a several-hundred-page document would exceed.",
+          "",
+          "Batch is for a whole dataset on a schedule, not an individual upload that someone is waiting on."
+        ]
+      },
+      {
+        "id": "p05",
+        "obj": "1.1.3",
+        "q": "A company needs to recalculate a churn-risk score for all 3 million customers once a week. No one needs individual results on demand. Which option is MOST cost-effective?",
+        "a": [
+          "Batch transform",
+          "Real-time inference",
+          "Asynchronous inference",
+          "Serverless inference"
+        ],
+        "c": 0,
+        "why": "Whole dataset, on a schedule, no live endpoint needed: batch transform, which spins up only for the job.",
+        "wrong": [
+          "",
+          "An always-on endpoint would sit idle all week and cost money for nothing.",
+          "Asynchronous handles individual large requests, not a scheduled sweep of millions of rows.",
+          "Serverless is for bursty on-demand traffic, not a planned bulk job."
+        ]
+      },
+      {
+        "id": "p06",
+        "obj": "1.1.4",
+        "q": "A hospital wants to predict patient no-shows using appointment records stored in a database with columns for date, department, age, and prior no-shows. What type of data is this?",
+        "a": [
+          "Unstructured, image data",
+          "Structured, tabular data",
+          "Unstructured, text data",
+          "Unlabeled, time-series data"
+        ],
+        "c": 1,
+        "why": "Rows and columns in a database is structured, tabular data.",
+        "wrong": [
+          "There are no images involved.",
+          "",
+          "The data is in fixed columns, not free-form text.",
+          "The records include past no-show outcomes, so they can serve as labels, and a table of appointments isn't a time series of one measurement."
+        ]
+      },
+      {
+        "id": "p07",
+        "obj": "4.1.6",
+        "q": "A model achieves 99% accuracy on its training data and 62% on a held-out test set. Which statement BEST describes the problem and the likely fix?",
+        "a": [
+          "Underfitting; train for more epochs",
+          "Overfitting; add more varied training data or simplify the model",
+          "Data leakage; delete the test set",
+          "The test set is wrong; evaluate on training data instead"
+        ],
+        "c": 1,
+        "why": "A large gap between training and test accuracy is the signature of overfitting (high variance). More diverse data or a simpler model are standard remedies.",
+        "wrong": [
+          "Underfitting shows poor performance on both sets, not a big gap.",
+          "",
+          "Deleting the test set removes your only honest measurement.",
+          "Evaluating on training data hides the problem instead of fixing it."
+        ]
+      },
+      {
+        "id": "p08",
+        "obj": "4.1.6",
+        "q": "A model performs poorly on both its training data and new data. Which term describes this, and what is a reasonable next step?",
+        "a": [
+          "Overfitting; collect a test set",
+          "Underfitting; use a more capable model or better features",
+          "High variance; reduce the training data",
+          "Nondeterminism; set a random seed"
+        ],
+        "c": 1,
+        "why": "Bad on both sets means the model never captured the pattern: underfitting, or high bias. A more expressive model, better features, or more training helps.",
+        "wrong": [
+          "Overfitting is good on training and bad on new data, not bad on both.",
+          "",
+          "High variance is the overfitting side. Reducing data would make things worse.",
+          "Nondeterminism is a generative AI limitation, unrelated to fit."
+        ]
+      },
+      {
+        "id": "p09",
+        "obj": "1.1.1",
+        "q": "A company uses a trained demand-forecasting model every morning to generate the day's inventory orders. Which term describes what happens each morning?",
+        "a": [
+          "Training",
+          "Inferencing",
+          "Labeling",
+          "Feature engineering"
+        ],
+        "c": 1,
+        "why": "Using a trained model on new input to get predictions is inference. Training already happened.",
+        "wrong": [
+          "Training adjusts the model from examples. Nothing is being re-learned each morning.",
+          "",
+          "Labeling means attaching correct answers to examples, a data-preparation step.",
+          "Feature engineering is choosing or shaping the inputs before training."
+        ]
+      },
+      {
+        "id": "p10",
+        "obj": "1.1.4",
+        "q": "Which pair correctly matches a data type to an example?",
+        "a": [
+          "Time-series data: a customer's mailing address",
+          "Unstructured data: a spreadsheet of monthly sales",
+          "Labeled data: product photos each tagged with the product's category",
+          "Tabular data: a folder of recorded phone calls"
+        ],
+        "c": 2,
+        "why": "Photos with a category attached to each are labeled data, ready for supervised learning.",
+        "wrong": [
+          "An address is a plain field, not a measurement over time.",
+          "A spreadsheet is structured, tabular data.",
+          "",
+          "Recorded calls are unstructured audio, not a table."
+        ]
+      }
+    ],
+    "notTested": []
+  },
+  "verified": {
+    "date": "2026-10-07",
+    "checks": [
+      "Tools: Teachable Machine confirmed free with no account, in-browser training, optional Google Drive save; version 2.9 updated September 2026 per a September 2026 review; the site itself renders only in a browser, so the FAQ was checked through a current third-party review rather than the vendor page",
+      "Links: teachablemachine.withgoogle.com opens; SageMaker AI deploy and batch-transform documentation pages open and are current",
+      "Facts: the four SageMaker AI inference options (real-time, serverless, asynchronous with up to 1 GB and one hour, batch transform) confirmed against docs.aws.amazon.com on October 7, 2026",
+      "Exam alignment: content mapped to AIF-C01 v1.1 objectives 1.1.1, 1.1.3, 1.1.4, 1.1.5, 1.2.3, 4.1.6 using the official HTML guide; 'generative AI is not a learning type' kept as a deliberate distractor lesson",
+      "Answers: all five quiz answers, every checkpoint, and all ten exam practice answers re-read and confirmed; each wrong option has a stated reason",
+      "Guide match: step, Exam Lens, and quiz text identical across the Gamma deck (19 cards verified by reading the generated deck), the instructor guide, the student guide, and this file"
+    ],
+    "note": "Full rebuild of Day 2: labeling mini-lab now uses the projected 20-outfit deck instead of a shared folder; skew trap changed to dark vs light backgrounds to match the live demo; Exam Lens expanded to five terms with objective IDs; exam block added (16 cards, 10 practice); quiz Q2 and Q5 options tightened. Rubric added October 7 (four items, 100 points) for the grading drawer.",
+    "sources": [
+      "https://docs.aws.amazon.com/sagemaker/latest/dg/deploy-model.html",
+      "https://docs.aws.amazon.com/sagemaker/latest/dg/batch-transform.html",
+      "https://docs.aws.amazon.com/aws-certification/latest/ai-practitioner-01/ai-practitioner-01-domain1.html",
+      "https://www.kidsaitools.com/en/articles/teachable-machine-review-2026"
+    ]
+  },
+  "rubric": {
+    "items": [
+      {
+        "id": "model",
+        "label": "Three-class model trained on varied photos",
+        "points": 20,
+        "good": [
+          "Your model has three working classes and the photos are varied, {name}. That's the clean baseline the rest of the lab needs.",
+          "Nice variety in your training photos, {name}. Different angles and backgrounds are what keep a model honest."
+        ],
+        "fix": [
+          "Your training photos look like they came from one spot. Move around, change the background, and retrain before you break it.",
+          "Add more variety to each class: angles, distances, backgrounds. Thirty varied photos beats a hundred identical ones."
+        ]
+      },
+      {
+        "id": "failure",
+        "label": "Failure sentence names the shortcut the model learned",
+        "points": 35,
+        "quoteStep": 5,
+        "good": [
+          "\"{quote}\" names the exact shortcut, {name}. That sentence is the whole lab.",
+          "You nailed the failure sentence, {name}: \"{quote}\""
+        ],
+        "fix": [
+          "Your failure sentence says it got confused, but not what it learned instead. Name the shortcut: the background, the lighting, the angle.",
+          "Say what the model actually latched onto. 'It learned dark background means mug' is the kind of sentence I'm after."
+        ]
+      },
+      {
+        "id": "datasheet",
+        "label": "Four-part data sheet; every fix is training data",
+        "points": 30,
+        "good": [
+          "Your data sheet is specific about what the model never saw, {name}, and every fix is new training data. That's the right instinct.",
+          "The fixes on your data sheet are all data, not settings, {name}. That's exactly the point."
+        ],
+        "fix": [
+          "Your fixes describe changing settings or training longer. A data problem needs data: which photos would you add for each one?",
+          "Each fix should be training data you'd collect. 'Retrain it' isn't a fix; 'add 20 photos of the mug on a dark background' is."
+        ]
+      },
+      {
+        "id": "edges",
+        "label": "Five edge cases tested; screenshot submitted",
+        "points": 15,
+        "quoteStep": 6,
+        "good": [
+          "Good edge-case testing, {name}. \"{quote}\" tells me you actually pushed on it.",
+          "You tested the weird cases, {name}, which is where models break."
+        ],
+        "fix": [
+          "List which of the five edge cases fooled it and what the confidence bars did. That's your evidence.",
+          "Try all five edge cases and note which ones it got wrong. Even 'it got all five right' is worth writing down."
+        ]
+      }
+    ],
+    "allMet": "This is complete, {name}. For the Stretch, retrain on a balanced set and prove the same edge cases now pass."
+  }
 }
