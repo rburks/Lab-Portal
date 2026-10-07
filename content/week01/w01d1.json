@@ -140,24 +140,29 @@
   },
   "lens": [
     {
+      "term": "AI, ML, deep learning, generative AI",
+      "plain": "The nesting dolls. AI is the umbrella, machine learning learns rules from examples, deep learning stacks many layers, generative AI creates new content.",
+      "exam": "Domain 1: distinguishing AI, machine learning, deep learning, and generative AI."
+    },
+    {
+      "term": "Narrow AI vs AGI",
+      "plain": "Narrow AI does one kind of task very well. AGI would do any mental task a person can. Only narrow AI exists.",
+      "exam": "Not in any Domain. The exam only tests today's narrow AI; AGI and ASI never appear. Know the difference so the word \"AI\" in a question never makes you think of robots or sci-fi."
+    },
+    {
       "term": "Agentic AI",
       "plain": "A model plus tools plus a loop that decides its next step.",
-      "exam": "Domain 1: agentic AI as the newest layer of AI."
-    },
-    {
-      "term": "Generative AI",
-      "plain": "AI that creates new content instead of only predicting a label.",
-      "exam": "Domain 1: generative AI built on deep learning."
-    },
-    {
-      "term": "When not to use AI",
-      "plain": "You need an exact repeatable answer, there's not enough good data, or the cost outweighs the value.",
-      "exam": "Domain 1: when AI/ML is and isn't appropriate."
+      "exam": "Domain 1, Objectives 1.1.1 and 1.1.2: define agentic AI and tell it apart from AI, ML, GenAI, and deep learning. Also 1.2.4 (real-world applications) and Domain 3, 3.1.6 (the role of AI agents in business)."
     },
     {
       "term": "Classification vs regression",
       "plain": "Sorting into categories vs predicting a number.",
       "exam": "Domain 1: real-world use cases by problem type."
+    },
+    {
+      "term": "When not to use AI",
+      "plain": "You need an exact repeatable answer, there's not enough good data, or the cost outweighs the value.",
+      "exam": "Domain 1: when AI/ML is and isn't appropriate."
     }
   ],
   "quiz": [
@@ -206,15 +211,15 @@
       "why": "An agent is a model plus tools plus a loop that decides what to do next."
     },
     {
-      "q": "Which was the 2017 breakthrough that today's language models build on?",
+      "q": "Your bank's app rounds every purchase up to the nearest dollar and saves the change. Is that AI?",
       "a": [
-        "The first chatbot",
-        "The transformer paper",
-        "The launch of ChatGPT",
-        "The 2012 image contest"
+        "Yes, because it runs automatically",
+        "Yes, because it involves money",
+        "No, it's a rule a person wrote, with the same result every time",
+        "No, because banks don't use AI"
       ],
-      "c": 1,
-      "why": "The 2017 transformer paper introduced attention, the mechanism inside every modern LLM."
+      "c": 2,
+      "why": "The test is whether the machine learned its rules from examples or a person wrote them. Rounding is a written rule. Same input, same output, forever. Banks do use AI elsewhere, like fraud detection, which learns from examples."
     }
   ],
   "tools": [
@@ -222,19 +227,19 @@
       "name": "ChatGPT",
       "url": "https://chatgpt.com",
       "use": "General assistant for the three-way comparison",
-      "free": "Free tier, no card. Shows ads in the US."
+      "free": "Free plan, no credit card. Unlimited text chat on the free model; limits on uploads, images, and voice. Verified Oct 6, 2026."
     },
     {
       "name": "Claude",
       "url": "https://claude.ai",
       "use": "General assistant for the comparison",
-      "free": "Free account."
+      "free": "Free plan at $0, no credit card. Chat, web search, file creation, and memory included. Verified Oct 6, 2026."
     },
     {
       "name": "Gemini",
       "url": "https://gemini.google.com",
       "use": "General assistant for the comparison",
-      "free": "Free with a Google account."
+      "free": "Free with a Google account, no card. From Oct 9, 2026 the free tier runs the lighter Flash-Lite model. Verified Oct 6, 2026."
     },
     {
       "name": "Google Docs",
@@ -242,5 +247,290 @@
       "use": "Your comparison doc",
       "free": "Free with a Google account."
     }
-  ]
+  ],
+  "exam": {
+    "objectives": [
+      "1.1.1",
+      "1.1.2",
+      "1.2.1",
+      "1.2.2",
+      "1.2.3",
+      "1.2.4"
+    ],
+    "cards": [
+      {
+        "id": "c01",
+        "obj": "1.1.1",
+        "q": "What is artificial intelligence, in one sentence?",
+        "a": "Software that does a task we'd normally say takes human thinking: recognizing, predicting, deciding, or generating. It's the umbrella term; everything else tonight sits under it.",
+        "term": "AI"
+      },
+      {
+        "id": "c02",
+        "obj": "1.1.1",
+        "q": "What is machine learning, and how is it different from ordinary programming?",
+        "a": "Ordinary programs follow rules a person wrote. Machine learning finds the rules itself by looking at many examples. You give it data and answers, it works out the pattern.",
+        "term": "ML"
+      },
+      {
+        "id": "c03",
+        "obj": "1.1.1",
+        "q": "What makes deep learning different from other machine learning?",
+        "a": "Deep learning uses a neural network with many layers, so it can learn from raw messy input like pixels or audio without a person picking out the features first. It's a type of ML, not a separate thing.",
+        "term": "Deep learning"
+      },
+      {
+        "id": "c04",
+        "obj": "1.1.1",
+        "q": "What is generative AI?",
+        "a": "AI that produces new content (text, images, code, audio) instead of only sorting or predicting. Most of it is built on deep learning. ChatGPT, Claude, and Gemini are generative AI.",
+        "term": "Generative AI (GenAI)"
+      },
+      {
+        "id": "c05",
+        "obj": "1.1.1",
+        "q": "What is agentic AI?",
+        "a": "AI that takes actions toward a goal over several steps: it plans, uses tools like search or email, checks results, and keeps going. A chatbot answers; an agent does.",
+        "term": "Agentic AI"
+      },
+      {
+        "id": "c06",
+        "obj": "1.1.2",
+        "q": "How do AI, machine learning, deep learning, and generative AI fit together?",
+        "a": "Nested circles. AI is the biggest. Machine learning is inside AI. Deep learning is inside machine learning. Generative AI is mostly built on deep learning. Agentic AI uses generative models and adds actions.",
+        "term": "The AI family tree"
+      },
+      {
+        "id": "c07",
+        "obj": "1.1.1",
+        "q": "What's the difference between a model and an algorithm?",
+        "a": "The algorithm is the recipe for learning. The model is what comes out after the algorithm has learned from data: the thing you actually use to make predictions.",
+        "term": "Model vs algorithm"
+      },
+      {
+        "id": "c08",
+        "obj": "1.1.1",
+        "q": "What's the difference between training and inference?",
+        "a": "Training is the learning phase: the model studies examples and adjusts. Inference is the using phase: the trained model gets new input and gives an answer. Training happens once (or occasionally); inference happens every time you use it.",
+        "term": "Training vs inferencing"
+      },
+      {
+        "id": "c09",
+        "obj": "1.2.3",
+        "q": "When is a problem a classification problem?",
+        "a": "When the answer is a category or label: spam or not spam, which of five product types, approve or deny. The output is a choice from a fixed set.",
+        "term": "Classification"
+      },
+      {
+        "id": "c10",
+        "obj": "1.2.3",
+        "q": "When is a problem a regression problem?",
+        "a": "When the answer is a number on a scale: next month's sales, a house price, how many minutes a delivery will take. The output is a quantity, not a category.",
+        "term": "Regression"
+      },
+      {
+        "id": "c11",
+        "obj": "1.2.3",
+        "q": "When is a problem a clustering problem?",
+        "a": "When you have no labels and want the computer to find natural groups on its own, like sorting customers into segments nobody defined in advance. The groups come from the data.",
+        "term": "Clustering"
+      },
+      {
+        "id": "c12",
+        "obj": "1.2.2",
+        "q": "When is AI the wrong tool for a job?",
+        "a": "When you need the exact same correct answer every time (a tax calculation, a rounding rule), when a simple rule already works, or when the cost of building and running it outweighs the benefit. AI predicts; it doesn't guarantee.",
+        "term": "When not to use AI/ML"
+      },
+      {
+        "id": "c13",
+        "obj": "1.2.1",
+        "q": "What three kinds of value does AWS say AI/ML brings to a business?",
+        "a": "Helping humans decide (surfacing patterns a person would miss), scaling a solution to volumes people can't handle, and automating repetitive work. If a scenario mentions one of these, AI/ML is probably appropriate.",
+        "term": "Where AI/ML adds value"
+      },
+      {
+        "id": "c14",
+        "obj": "1.2.4",
+        "q": "Name five everyday applications that count as AI on the exam?",
+        "a": "Computer vision (reading images), NLP (understanding text), speech recognition, recommendation systems, fraud detection, and forecasting. Knowledge bases and agentic AI were added in 2026.",
+        "term": "Real-world AI applications"
+      }
+    ],
+    "practice": [
+      {
+        "id": "p01",
+        "obj": "1.1.2",
+        "q": "A company's marketing team says they're 'using AI' because a tool writes first drafts of their emails. The data team says they're 'using AI' because a model predicts which customers will cancel. Which statement is MOST accurate?",
+        "a": [
+          "Only the marketing team is using AI; prediction isn't AI.",
+          "Only the data team is using AI; writing text isn't AI.",
+          "Both are using AI. The marketing tool is generative AI and the prediction model is machine learning.",
+          "Neither is using AI unless the tools use deep learning."
+        ],
+        "c": 2,
+        "why": "AI is the umbrella. Generating text is generative AI; predicting churn is classic machine learning. Both sit under AI.",
+        "wrong": [
+          "Prediction from data is the textbook definition of machine learning, which is AI.",
+          "Generating new text is generative AI, which is AI.",
+          "",
+          "Deep learning is one technique inside ML. Plenty of AI isn't deep learning."
+        ]
+      },
+      {
+        "id": "p02",
+        "obj": "1.1.1",
+        "q": "A retailer wants a system that reads a customer's request, searches inventory, places the order, and emails a confirmation without a person stepping in between. Which term BEST describes this system?",
+        "a": [
+          "A large language model (LLM)",
+          "Agentic AI",
+          "Computer vision",
+          "A regression model"
+        ],
+        "c": 1,
+        "why": "Multi-step, goal-directed, uses tools (search, order, email), and acts on its own: that's an agent.",
+        "wrong": [
+          "An LLM generates text. It might sit inside the agent, but the LLM alone doesn't place orders.",
+          "",
+          "Computer vision interprets images; nothing here is visual.",
+          "Regression predicts a number. This system takes actions."
+        ]
+      },
+      {
+        "id": "p03",
+        "obj": "1.2.2",
+        "q": "A payroll department wants to replace its tax-withholding calculation with an AI model to 'modernize.' The calculation must produce the exact legally required amount every time. What should a consultant recommend?",
+        "a": [
+          "Use a deep learning model trained on past paychecks.",
+          "Use a generative AI assistant to compute each amount.",
+          "Keep rule-based software; AI is not appropriate when a specific exact outcome is required.",
+          "Use a classification model to pick the right tax bracket."
+        ],
+        "c": 2,
+        "why": "The exam guide lists 'situations when a specific outcome is needed instead of a prediction' as a case where AI/ML is not appropriate. Tax withholding is a fixed rule.",
+        "wrong": [
+          "A model predicts; it can be wrong. Payroll can't be approximately right.",
+          "Generative AI can produce different answers to the same question. Worst possible fit.",
+          "",
+          "Even a perfect bracket classifier doesn't compute the exact amount, and the rule is already known."
+        ]
+      },
+      {
+        "id": "p04",
+        "obj": "1.2.3",
+        "q": "A logistics company wants to predict how many minutes each delivery will take so drivers can be scheduled. Which type of machine learning problem is this?",
+        "a": [
+          "Classification",
+          "Clustering",
+          "Regression",
+          "Natural language processing"
+        ],
+        "c": 2,
+        "why": "The answer is a number on a continuous scale (minutes), so it's regression.",
+        "wrong": [
+          "Classification picks a category, like 'late' or 'on time'. The question asks for minutes.",
+          "Clustering finds groups in unlabeled data. There's a clear target here.",
+          "",
+          "NLP is about text. There's no text to understand."
+        ]
+      },
+      {
+        "id": "p05",
+        "obj": "1.2.3",
+        "q": "A bank wants to flag incoming credit card transactions as either legitimate or fraudulent. Which ML technique fits BEST?",
+        "a": [
+          "Regression",
+          "Classification",
+          "Clustering",
+          "Summarization"
+        ],
+        "c": 1,
+        "why": "Two labels, pick one for each transaction: classification. Fraud detection is also one of the exam's named real-world applications.",
+        "wrong": [
+          "Regression outputs a number. 'Fraud or not' is a label.",
+          "",
+          "Clustering could find odd groups, but the bank already knows the two categories it wants.",
+          "Summarization is a generative AI use case for text."
+        ]
+      },
+      {
+        "id": "p06",
+        "obj": "1.2.3",
+        "q": "An online store has purchase histories for millions of shoppers but no predefined customer categories. Marketing wants to discover natural groups of similar shoppers to target. Which technique fits?",
+        "a": [
+          "Clustering",
+          "Classification",
+          "Regression",
+          "Agentic AI"
+        ],
+        "c": 0,
+        "why": "No labels, and the goal is to find groups the data suggests: clustering.",
+        "wrong": [
+          "",
+          "Classification needs known categories to assign. There aren't any yet.",
+          "Regression predicts a quantity. Nothing is being predicted.",
+          "Agents take actions. This is analysis of existing data."
+        ]
+      },
+      {
+        "id": "p07",
+        "obj": "1.2.1",
+        "q": "A hospital's radiologists review 4,000 scans a week and are behind. A proposed AI tool would highlight scans most likely to show a problem so radiologists see those first. Which value of AI/ML does this BEST illustrate?",
+        "a": [
+          "Replacing human decision making",
+          "Assisting human decision making and improving scalability",
+          "Guaranteeing a correct diagnosis",
+          "Reducing the need for medical data"
+        ],
+        "c": 1,
+        "why": "The tool prioritizes; humans still decide. The exam guide lists 'assist human decision making' and 'solution scalability' as core sources of AI/ML value.",
+        "wrong": [
+          "Radiologists still make the call. The tool orders the queue.",
+          "",
+          "AI predicts likelihoods. It can't guarantee a diagnosis, and a scenario promising guarantees is a red flag.",
+          "ML needs data; it doesn't reduce the need for it."
+        ]
+      },
+      {
+        "id": "p08",
+        "obj": "1.2.4",
+        "q": "Which of the following is NOT an example of a real-world AI application as listed in the AIF-C01 exam guide?",
+        "a": [
+          "A system that recommends products based on past purchases",
+          "A system that transcribes spoken customer calls into text",
+          "A spreadsheet formula that sums monthly expenses",
+          "A system that forecasts next quarter's demand"
+        ],
+        "c": 2,
+        "why": "A sum is a fixed rule with one exact answer. The other three are named exam applications: recommendation systems, speech recognition, and forecasting.",
+        "wrong": [
+          "Recommendation systems are a listed AI application.",
+          "Speech recognition is a listed AI application.",
+          "",
+          "Forecasting is a listed AI application."
+        ]
+      }
+    ],
+    "notTested": [
+      {
+        "term": "AGI and ASI",
+        "why": "The exam only covers today's narrow AI. We teach the difference so the word AI never means robots in your head, but no question will ask about AGI or ASI."
+      }
+    ]
+  },
+  "verified": {
+    "date": "2026-10-06",
+    "checks": [
+      "Tools: ChatGPT, Claude, and Gemini free plans opened live; sign-up with no card confirmed for all three; Gemini free tier moves to Flash-Lite only on October 9, 2026 (noted on the tool slide and card); ChatGPT free plan does not state ads, so that claim was removed",
+      "Links: every URL in steps and tools opens to the intended page",
+      "Facts and dates: AI family tree, Narrow AI vs AGI vs ASI, and agentic AI wording checked against the AIF-C01 exam guide v1.1 objectives 1.1.1, 1.1.2, 1.2.1 to 1.2.4",
+      "Answers: all five quiz answers, every checkpoint answer, and all eight exam practice answers re-read and confirmed; each wrong option has a reason",
+      "Guide match: steps, Exam Lens, and quiz text identical to the W1D1 Student Guide; Exam Lens notes corrected to name only objectives that are actually tested (AGI and ASI marked not tested)"
+    ],
+    "note": "Exam Lens rows 2 and 3 reworded to match official objectives; exam block (14 cards, 8 practice questions) added. No tool, link, or price changes.",
+    "sources": [
+      "https://docs.aws.amazon.com/aws-certification/latest/ai-practitioner-01/aif-01-revisions.html",
+      "https://docs.aws.amazon.com/aws-certification/latest/ai-practitioner-01/ai-practitioner-01-domain1.html"
+    ]
+  }
 }

@@ -1,10 +1,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { SESSIONS, WEEKS, type Session } from "../content/course";
 import { useAuth } from "../auth";
 import { store, type Attendance, type ContentRow, type Grade, type Profile, type Progress, type Release, type Submission } from "../lib/store";
 import type { OHRequest } from "../lib/store";
 import { ContentPage, AttendancePage } from "./ContentPage";
+import { buildSchedule, iso } from "../lib/schedule";
 import { computeStats, download, fmtDate, initials, isUnlocked, labPct, sessionState, STATE_LABEL, toCSV, type SessionState, type StudentStat } from "../lib/logic";
 
 type Data = { profiles: Profile[]; progress: Progress[]; subs: Submission[]; grades: Grade[]; releases: Release[]; attendance: Attendance[]; content: ContentRow[] };
@@ -24,14 +25,52 @@ export default function Instructor() {
       <div className="hero"><div><span className="eyebrow">{students.length} students · Week {Math.max(1, ...d.releases.map(r => SESSIONS.find(s => s.id === r.session_id)?.week || 1))} open</span><h1>Instructor</h1></div>
       </div>
       <Routes>
-        <Route index element={<Overview d={d} />} />
-        <Route path="grid" element={<Grid d={d} reload={reload} />} />
-        <Route path="release" element={<ReleasePanel d={d} reload={reload} />} />
-        <Route path="roster" element={<Roster d={d} reload={reload} />} />
-        <Route path="content" element={<ContentPage />} />
-        <Route path="attendance" element={<AttendancePage />} />
+        <Route index element={<Dashboard d={d} reload={reload} />} />
+        <Route path="grid" element={<Navigate to="/instructor" replace />} />
+        <Route path="release" element={<Navigate to="/instructor/sessions" replace />} />
+        <Route path="sessions" element={<ContentPage />} />
+        <Route path="class" element={<ClassPage d={d} reload={reload} />} />
+        <Route path="roster" element={<Navigate to="/instructor/class?tab=roster" replace />} />
+        <Route path="attendance" element={<Navigate to="/instructor/class?tab=attendance" replace />} />
+        <Route path="content" element={<Navigate to="/instructor/sessions" replace />} />
       </Routes>
     </>
+  );
+}
+
+// ---------- Dashboard: overview on top, the full progress grid underneath ----------
+function Dashboard({ d, reload }: { d: Data; reload: () => Promise<void> }) {
+  const loc = useLocation();
+  useEffect(() => { if (loc.hash === "#grid") document.getElementById("grid")?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [loc.hash, loc.search]);
+  return (
+    <div className="stack" style={{ gap: 22 }}>
+      <Overview d={d} />
+      <div id="grid" style={{ scrollMarginTop: 90 }}>
+        <div className="row between" style={{ marginBottom: 10 }}><div><h2 style={{ fontSize: "1.2rem" }}>Progress by week</h2><p className="small muted">Click a cell to grade or review a student's work. Filters also drive the CSV export.</p></div></div>
+        <Grid d={d} reload={reload} />
+      </div>
+    </div>
+  );
+}
+
+// ---------- Class: attendance and roster on one page ----------
+function ClassPage({ d, reload }: { d: Data; reload: () => Promise<void> }) {
+  const loc = useLocation();
+  const [isClassDay, setIsClassDay] = useState<boolean | null>(null);
+  useEffect(() => { (async () => { const [st, days] = await Promise.all([store.settings(), store.calendarDays()]); const today = iso(new Date()); setIsClassDay(buildSchedule(st, days).some(x => x.kind === "session" && x.date === today)); })(); }, []);
+  const fromUrl = new URLSearchParams(loc.search).get("tab");
+  const [tab, setTab] = useState<"attendance" | "roster" | null>(fromUrl === "roster" || fromUrl === "attendance" ? fromUrl : null);
+  useEffect(() => { if (fromUrl === "roster" || fromUrl === "attendance") setTab(fromUrl); }, [fromUrl]);
+  const active = tab ?? (isClassDay == null ? null : isClassDay ? "attendance" : "roster");
+  if (!active) return <div className="empty">Loading…</div>;
+  return (
+    <div className="stack" style={{ gap: 14 }}>
+      <div className="row between">
+        <div className="tabs" style={{ borderBottom: 0 }}><button className={active === "attendance" ? "on" : ""} onClick={() => setTab("attendance")}>Attendance</button><button className={active === "roster" ? "on" : ""} onClick={() => setTab("roster")}>Roster</button></div>
+        {isClassDay && active === "roster" && <span className="small muted">Class meets today. Attendance is one tab over.</span>}
+      </div>
+      {active === "attendance" ? <AttendancePage /> : <Roster d={d} reload={reload} />}
+    </div>
   );
 }
 
@@ -52,7 +91,7 @@ function Overview({ d }: { d: Data }) {
         <div className="kpi"><span className="eyebrow">Class lab completion</span><div className="v">{classLab}%</div><div className="small muted">average across open sessions</div></div>
         <div className="kpi"><span className="eyebrow">Class quiz average</span><div className="v">{classQuiz == null ? "—" : classQuiz + "%"}</div><div className="small muted">best score per student per session</div></div>
         <div className="kpi"><span className="eyebrow">Active this week</span><div className="v">{active7}<span className="muted" style={{ fontSize: "1rem" }}> / {stats.length}</span></div><div className="small muted">students with activity in 7 days</div></div>
-        <div className="kpi"><span className="eyebrow">Content verified</span><div className="v">{d.content.filter(c => c.verified_at && c.verified_at >= c.updated_at).length}<span className="muted" style={{ fontSize: "1rem" }}> / {d.content.length}</span></div><div className="small muted">imported sessions with a current check</div></div>
+        <div className="kpi"><span className="eyebrow">Content verified</span><div className="v">{d.content.filter(c => c.content.verified).length}<span className="muted" style={{ fontSize: "1rem" }}> / {d.content.length}</span></div><div className="small muted">imported sessions carrying a build-time verification stamp</div></div>
         <div className="kpi"><span className="eyebrow">Waiting for grading</span><div className="v">{ungradedPairs}</div><div className="small muted">submitted labs without a score</div></div>
       </div>
       <div className="insights">
@@ -67,7 +106,7 @@ function Overview({ d }: { d: Data }) {
           {!struggling.length && <div className="empty small">Nobody flagged. Nice.</div>}
         </div>
         <OHCard />
-        <div className="card"><div className="row between"><h3>Grading queue</h3><NavLink to="/instructor/grid?status=submitted" className="small">Open in grid →</NavLink></div>
+        <div className="card"><div className="row between"><h3>Grading queue</h3><NavLink to="/instructor?status=submitted#grid" className="small">Open in grid ↓</NavLink></div>
           <p className="small muted" style={{ margin: "4px 0 8px" }}>Most recent submissions without a score.</p>
           {[...ungraded].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8).map(s => { const p = d.profiles.find(x => x.id === s.student_id); const se = SESSIONS.find(x => x.id === s.session_id)!; return (
             <div className="person" key={s.id}><div className="avatar">{initials(p?.full_name || "?")}</div><div style={{ minWidth: 0 }}><b>{p?.full_name}</b><div className="small muted" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>W{se.week} D{se.day} · {se.title}</div></div><span className="small muted">{fmtDate(s.created_at)}</span></div>); })}
@@ -191,33 +230,6 @@ function GradeDrawer({ cell, onClose, onSaved }: { cell: Cell; onClose: () => vo
 }
 
 // ---------- Release panel ----------
-function ReleasePanel({ d, reload }: { d: Data; reload: () => Promise<void> }) {
-  const { toast } = useAuth();
-  const [student, setStudent] = useState<string>("all");
-  const students = d.profiles.filter(p => p.role === "student");
-  const sidv = student === "all" ? null : student;
-  const globally = (id: string) => d.releases.some(r => r.session_id === id && r.student_id === null);
-  const forStudent = (id: string) => d.releases.some(r => r.session_id === id && r.student_id === sidv);
-  const toggle = async (id: string, on: boolean) => { await store.setRelease(id, sidv, on); await reload(); toast(on ? "Unlocked" : "Locked"); };
-  const toggleWeek = async (w: number, on: boolean) => { for (const s of SESSIONS.filter(x => x.week === w)) await store.setRelease(s.id, sidv, on); await reload(); toast(`Week ${w} ${on ? "unlocked" : "locked"}`); };
-  return (
-    <div className="stack" style={{ gap: 14 }}>
-      <div className="card"><div className="row between">
-        <div><h3>Unlock sessions</h3><p className="small muted">Unlock for the whole class, or pick one student to open a session early or hold one back.</p></div>
-        <label className="row" style={{ gap: 8 }}><span className="small muted">For</span><select style={{ width: "auto" }} value={student} onChange={e => setStudent(e.target.value)}><option value="all">Whole class</option>{students.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}</select></label>
-      </div></div>
-      <div className="weeks">{WEEKS.map(w => { const days = SESSIONS.filter(s => s.week === w.n); const allOn = days.every(s => forStudent(s.id)); return (
-        <div className="week" key={w.n}>
-          <div className="week-h"><div><div className="n">WEEK {String(w.n).padStart(2, "0")}</div><h4>{w.theme}</h4></div><button className={`btn xs ${allOn ? "ghost" : ""}`} onClick={() => toggleWeek(w.n, !allOn)}>{allOn ? "Lock week" : "Unlock week"}</button></div>
-          {days.map(s => { const on = forStudent(s.id); const g = sidv && globally(s.id); return (
-            <div className="release-row" key={s.id}><div style={{ minWidth: 0 }}><div className="small" style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.title}>Day {s.day} · {s.title}</div><div className="small muted">{!s.built ? "No content imported" : (() => { const c = d.content.find(x => x.session_id === s.id); const v = c?.verified_at && c.verified_at >= c.updated_at; return <>{g ? "Open for the whole class" : on ? "Open" : "Locked"}{!v && <span className="pill warn" style={{ marginLeft: 6 }}>Not verified</span>}</>; })()}</div></div>
-              <button className={`btn xs ${on ? "ghost" : ""}`} onClick={() => toggle(s.id, !on)} disabled={!!g}>{on ? "Lock" : "Unlock"}</button></div>); })}
-        </div>); })}</div>
-    </div>
-  );
-}
-
-// ---------- Roster ----------
 function OHCard() {
   const [reqs, setReqs] = useState<OHRequest[]>([]);
   useEffect(() => { store.ohRequests().then(setReqs); }, []);
@@ -286,11 +298,12 @@ function Roster({ d, reload }: { d: Data; reload: () => Promise<void> }) {
         </>}
       </div>
       <div className="card"><h3>Roster ({rows.length})</h3>
-        <div className="grid-wrap"><table className="grid" style={{ marginTop: 8 }}><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Signed in</th><th></th></tr></thead><tbody>
+        <div className="grid-wrap"><table className="grid" style={{ marginTop: 8 }}><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Signed in</th><th>Absences</th><th></th></tr></thead><tbody>
           {rows.map(r => { const prof = d.profiles.find(p => p.email.toLowerCase() === r.email); return (
             <tr key={r.email}><td>{r.full_name || prof?.full_name || <span className="muted">—</span>}</td><td className="mono small">{r.email}</td>
               <td>{prof ? <select style={{ width: "auto", padding: "3px 6px" }} value={prof.role} onChange={async e => { await store.setRole(prof.id, e.target.value as "student" | "instructor"); await reload(); toast("Role updated"); }}><option value="student">Student</option><option value="instructor">Instructor</option></select> : <span className="pill">{r.role}</span>}</td>
               <td>{prof ? <span className="pill good">Yes</span> : <span className="pill">Not yet</span>}</td>
+              <td>{(() => { const n = prof ? d.attendance.filter(a => a.student_id === prof.id && a.status === "absent").length : 0; return n ? <span className={`pill ${n >= 2 ? "bad" : "warn"}`}>{n}</span> : <span className="muted">0</span>; })()}</td>
               <td><button className="btn ghost xs" onClick={async () => { await store.removeFromRoster(r.email); await load(); toast("Removed"); }}>Remove</button></td></tr>); })}
         </tbody></table></div></div>
     </div>

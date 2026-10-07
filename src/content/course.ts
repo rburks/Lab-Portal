@@ -26,7 +26,10 @@ export type SessionContent = {
   goal?: string; steps?: Step[]; stretch?: string[]; doneWhen?: string[]; lens?: LensTerm[]; quiz?: QuizQ[];
   sandbox?: "classifier"; submission?: { prompt: string; kinds: Array<"image" | "link" | "text"> }; tools?: Tool[];
   exam?: ExamBlock;
+  // Stamped by the build, not by the instructor: when the live checks were run, what was checked, and what changed.
+  verified?: Verified;
 };
+export type Verified = { date: string; checks: string[]; note: string; sources?: string[] };
 export type Session = {
   id: string;            // e.g. "w01d2"
   week: number;
@@ -93,7 +96,7 @@ export const SESSIONS: Session[] = WEEKS.flatMap(w =>
 );
 
 // Content registry: the database holds each session's content; this loads it into the shells above.
-const CONTENT_KEYS: (keyof SessionContent)[] = ["goal", "steps", "stretch", "doneWhen", "lens", "quiz", "sandbox", "submission", "tools", "exam"];
+const CONTENT_KEYS: (keyof SessionContent)[] = ["goal", "steps", "stretch", "doneWhen", "lens", "quiz", "sandbox", "submission", "tools", "exam", "verified"];
 export function applyContent(map: Record<string, SessionContent>) {
   for (const s of SESSIONS) {
     const c = map[s.id];
@@ -134,6 +137,15 @@ export function validateContent(c: unknown): string[] {
     prac.forEach((p, i) => { const k = p as Record<string, unknown>; if (!k.id || !k.obj || !k.q || !Array.isArray(k.a) || typeof k.c !== "number" || !k.why) e.push(`exam.practice[${i}]: needs id, obj, q, a[], c, why`); if (Array.isArray(k.a) && (k.a as unknown[]).length !== 4) e.push(`exam.practice[${i}]: exactly 4 options, like the real exam`); if (Array.isArray(k.a) && typeof k.c === "number" && (k.c < 0 || k.c >= (k.a as unknown[]).length)) e.push(`exam.practice[${i}]: c out of range`); if (k.obj && !objs.includes(String(k.obj))) e.push(`exam.practice[${i}]: obj ${k.obj} is not in exam.objectives`); if (k.wrong && (!Array.isArray(k.wrong) || (k.wrong as unknown[]).length !== (k.a as unknown[])?.length)) e.push(`exam.practice[${i}]: wrong[] must have one line per option (use "" for the correct one)`); });
     const ids = [...cards, ...prac].map(z => String((z as Record<string, unknown>).id)); if (new Set(ids).size !== ids.length) e.push("exam: card and practice ids must be unique within the session");
   }
+  // Verification stamp from the build. The portal never asks the instructor to verify; the JSON carries proof it was done.
+  const v = x.verified as Record<string, unknown> | undefined;
+  if (!v || typeof v !== "object") e.push("verified: missing. The build must run the live checks and stamp {date, checks[], note} before this file is importable.");
+  else {
+    if (typeof v.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v.date)) e.push("verified.date: must be YYYY-MM-DD");
+    else if (new Date(v.date).getTime() > Date.now() + 864e5) e.push("verified.date: is in the future");
+    if (!Array.isArray(v.checks) || v.checks.length < 3) e.push("verified.checks: list what was checked (tools and free tiers, links, facts and dates, answers, guide match)");
+    if (typeof v.note !== "string" || !v.note.trim()) e.push("verified.note: say what changed since the last build, or 'nothing changed'");
+  }
   return e;
 }
 
@@ -149,6 +161,7 @@ export function diffContent(a: SessionContent | undefined, b: SessionContent): s
   (a.quiz || []).forEach((q, i) => { const n = (b.quiz || [])[i]; if (!n || JSON.stringify(q) !== JSON.stringify(n)) out.push(`Quiz question ${i + 1} changed.`); });
   if (JSON.stringify(a.lens) !== JSON.stringify(b.lens)) out.push("Exam Lens terms changed.");
   if (JSON.stringify(a.tools) !== JSON.stringify(b.tools)) out.push("Tools list changed.");
+  if (a.verified?.date !== b.verified?.date) out.push(`Verification stamp: ${a.verified?.date ?? "none"} → ${b.verified?.date ?? "none"}.`);
   if (JSON.stringify(a.exam) !== JSON.stringify(b.exam)) { const ac = a.exam?.cards.length ?? 0, bc = b.exam?.cards.length ?? 0, ap = a.exam?.practice.length ?? 0, bp = b.exam?.practice.length ?? 0; out.push(`Exam block changed: cards ${ac} → ${bc}, practice ${ap} → ${bp}, objectives ${(b.exam?.objectives || []).join(", ") || "none"}.`); }
   if (JSON.stringify(a.doneWhen) !== JSON.stringify(b.doneWhen) || JSON.stringify(a.stretch) !== JSON.stringify(b.stretch)) out.push("Done-when or Stretch changed.");
   if (!out.length) out.push("No differences from the current content.");

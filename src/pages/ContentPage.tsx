@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SESSIONS, WEEKS, diffContent, validateContent, type SessionContent } from "../content/course";
 import { useAuth } from "../auth";
-import { store, type Attendance, type ContentRow, type Material, type Profile } from "../lib/store";
+import { store, type Attendance, type ContentRow, type Material, type Profile, type Release } from "../lib/store";
 import { buildSchedule, fmtLong, iso } from "../lib/schedule";
 import { download, fmtDate, initials } from "../lib/logic";
 
@@ -13,35 +13,80 @@ function describe(e: unknown): string {
   if (/row-level security|permission denied|not authorized/i.test(m)) return `${m}. Your account isn't being treated as an instructor by the database. Check that your row in the profiles table has role = instructor.`;
   return m;
 }
-const CHECKS: [string, string][] = [["tools", "Every tool opened live today; free tier and no-card status confirmed on the vendor's own page"], ["links", "Every link in steps, tools, and materials opens to the right page"], ["facts", "Dates, prices, version numbers, and regulatory facts re-checked against primary sources"], ["quiz", "All five quiz answers, every checkpoint answer, and every exam practice answer are correct"], ["guide", "Steps, Exam Lens, and quiz match the student guide word for word; exam objective IDs checked against the official guide"]];
 
 export function ContentPage() {
   const { toast, reloadContent } = useAuth();
   const [rows, setRows] = useState<ContentRow[]>([]);
   const [mats, setMats] = useState<Material[]>([]);
+  const [releases, setReleases] = useState<Release[]>([]);
+  const [students, setStudents] = useState<Profile[]>([]);
   const [sel, setSel] = useState<string>("w01d1");
-  const reload = useCallback(async () => { setRows(await store.allContent()); setMats(await store.materials()); }, []);
+  const reload = useCallback(async () => { const [c, m, r, p] = await Promise.all([store.allContent(), store.materials(), store.releases(), store.allProfiles()]); setRows(c); setMats(m); setReleases(r); setStudents(p.filter(x => x.role === "student")); }, []);
   useEffect(() => { reload(); }, [reload]);
   const row = rows.find(r => r.session_id === sel);
   const s = SESSIONS.find(x => x.id === sel)!;
-  const status = (r?: ContentRow) => { if (!r) return { cls: "", label: "No content" }; if (!r.verified_at || r.verified_at < r.updated_at) return { cls: "bad", label: r.verified_at ? "Changed since verified" : "Not verified" }; const d = Math.floor((Date.now() - new Date(r.verified_at).getTime()) / 86400000); return d === 0 ? { cls: "good", label: "Verified today" } : d <= 2 ? { cls: "good", label: `Verified ${d}d ago` } : { cls: "warn", label: `Verified ${d}d ago` }; };
+  const status = (r?: ContentRow) => { if (!r) return { cls: "", label: "No content" }; if (!r.content.verified) return { cls: "bad", label: "No verification stamp" }; const d = Math.floor((Date.now() - new Date(r.content.verified.date + "T12:00:00Z").getTime()) / 86400000); return d <= 7 ? { cls: "good", label: `Checked ${r.content.verified.date}` } : { cls: "warn", label: `Checked ${r.content.verified.date} (${d}d ago)` }; };
+  const openForClass = (id: string) => releases.some(r => r.session_id === id && r.student_id === null);
+  const earlyFor = (id: string) => releases.filter(r => r.session_id === id && r.student_id).map(r => r.student_id as string);
+  const toggleWeek = async (w: number, on: boolean) => { for (const x of SESSIONS.filter(q => q.week === w)) await store.setRelease(x.id, null, on); await reload(); toast(`Week ${w} ${on ? "unlocked" : "locked"} for the class`); };
   const exportAll = () => download(`lab-portal-content-${iso(new Date())}.json`, JSON.stringify(Object.fromEntries(rows.map(r => [r.session_id, { ...r.content, _version_note: r.version_note, _updated_at: r.updated_at, _verified_at: r.verified_at }])), null, 2));
   return (
     <div className="stack" style={{ gap: 14 }}>
-      <div className="row between"><p className="muted">Session content lives here, not in code. Import the JSON for a session, verify it before class, and attach the student guide.</p><button className="btn ghost sm" onClick={exportAll}>Export all content (JSON)</button></div>
-      <div className="lab" style={{ gridTemplateColumns: "300px minmax(0,1fr)" }}>
-        <aside className="card" style={{ padding: 10, maxHeight: "75vh", overflowY: "auto" }}>
-          {WEEKS.map(w => <div key={w.n} style={{ marginBottom: 8 }}><div className="eyebrow" style={{ padding: "6px 8px 2px" }}>Week {w.n}</div>
-            {SESSIONS.filter(x => x.week === w.n).map(x => { const r = rows.find(q => q.session_id === x.id); const st = status(r); return <button key={x.id} onClick={() => setSel(x.id)} className="sess" style={{ width: "100%", marginBottom: 4, borderColor: sel === x.id ? "var(--accent)" : "var(--line)", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 8, alignItems: "center", padding: "8px 10px" }}><span className="small" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><b>D{x.day}</b> · {x.title}</span><span className={`pill ${st.cls}`} style={{ fontSize: ".66rem" }}>{st.label}</span></button>; })}</div>)}
+      <div className="row between"><p className="muted">One place per session: import its content, attach materials, and unlock it. Verification is stamped into the file by the build.</p><button className="btn ghost sm" onClick={exportAll}>Export all content (JSON)</button></div>
+      <div className="lab" style={{ gridTemplateColumns: "320px minmax(0,1fr)" }}>
+        <aside className="card" style={{ padding: 10, maxHeight: "78vh", overflowY: "auto" }}>
+          {WEEKS.map(w => { const days = SESSIONS.filter(x => x.week === w.n); const allOpen = days.every(x => openForClass(x.id)); return (
+            <div key={w.n} style={{ marginBottom: 10 }}>
+              <div className="row between" style={{ padding: "6px 8px 2px" }}><span className="eyebrow">Week {w.n}</span><button className="btn xs ghost" style={{ padding: "1px 7px", fontSize: ".7rem" }} onClick={() => toggleWeek(w.n, !allOpen)}>{allOpen ? "Lock week" : "Unlock week"}</button></div>
+              {days.map(x => { const r = rows.find(q => q.session_id === x.id); const st = status(r); const open = openForClass(x.id); const early = earlyFor(x.id).length; return (
+                <button key={x.id} onClick={() => setSel(x.id)} className="sess" style={{ width: "100%", marginBottom: 4, borderColor: sel === x.id ? "var(--accent)" : "var(--line)", display: "grid", gridTemplateColumns: "18px minmax(0,1fr) auto", gap: 8, alignItems: "center", padding: "8px 10px" }} title={open ? "Open for the whole class" : early ? `Locked; open early for ${early}` : "Locked"}>
+                  <span style={{ fontSize: ".9rem", color: open ? "var(--good)" : "var(--mute)" }}>{open ? "●" : early ? "◐" : "○"}</span>
+                  <span className="small" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}><b>D{x.day}</b> · {x.title}</span>
+                  <span className={`pill ${st.cls}`} style={{ fontSize: ".66rem" }}>{st.label}</span>
+                </button>); })}
+            </div>); })}
+          <div className="small muted" style={{ padding: "4px 8px" }}>● open to class · ◐ early access for some · ○ locked</div>
         </aside>
         <section className="stack" style={{ gap: 14 }}>
           <div className="card"><span className="eyebrow">Week {s.week} · Day {s.day}</span><h2>{s.title}</h2>
-            {row ? <div className="row small muted" style={{ marginTop: 6 }}><span className={`pill ${status(row).cls}`}>{status(row).label}</span><span>Imported {fmtDate(row.updated_at)}{row.version_note ? ` · ${row.version_note}` : ""}</span>{row.verification?.note && <span>· Last check: {row.verification.note}</span>}</div> : <p className="small muted" style={{ marginTop: 6 }}>No content imported yet. Students who open this session see a "being built" notice.</p>}</div>
+            {row ? <div className="row small muted" style={{ marginTop: 6 }}><span className={`pill ${status(row).cls}`}>{status(row).label}</span><span>Imported {fmtDate(row.updated_at)}{row.version_note ? ` · ${row.version_note}` : ""}</span></div> : <p className="small muted" style={{ marginTop: 6 }}>No content imported yet. Students who open this session see a "being built" notice.</p>}</div>
+          <Access sel={sel} row={row} mats={mats.filter(m => m.session_id === sel)} students={students} openForClass={openForClass(sel)} early={earlyFor(sel)} onChange={reload} toast={toast} />
           <Importer sel={sel} current={row?.content} onDone={async () => { await reload(); await reloadContent(); }} toast={toast} />
-          {row && <Verify row={row} onDone={reload} toast={toast} />}
+          {row && <Verify row={row} />}
           <Materials sel={sel} mats={mats.filter(m => m.session_id === sel)} onDone={reload} toast={toast} />
         </section>
       </div>
+    </div>
+  );
+}
+
+// Readiness checklist plus unlock controls for one session.
+function Access({ sel, row, mats, students, openForClass, early, onChange, toast }: { sel: string; row?: ContentRow; mats: Material[]; students: Profile[]; openForClass: boolean; early: string[]; onChange: () => Promise<void>; toast: (m: string) => void }) {
+  const [pickEarly, setPickEarly] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const checks: [boolean, string][] = [[!!row, "Content imported"], [!!row?.content.verified, "Verification stamp from the build"], [mats.some(m => m.kind === "student_guide"), "Student guide uploaded"], [mats.some(m => m.kind === "slides"), "Slides link added"]];
+  const ready = checks.every(([ok]) => ok);
+  const missing = checks.filter(([ok]) => !ok).map(([, l]) => l);
+  const setClass = async (on: boolean) => {
+    if (on && !ready && !window.confirm(`Not everything is in place: ${missing.join(", ")}. Unlock anyway?`)) return;
+    setBusy(true); try { await store.setRelease(sel, null, on); await onChange(); toast(on ? "Unlocked for the whole class" : "Locked for the class"); } finally { setBusy(false); }
+  };
+  const toggleEarly = async (sid: string) => { const on = !early.includes(sid); setBusy(true); try { await store.setRelease(sel, sid, on); await onChange(); } finally { setBusy(false); } };
+  return (
+    <div className="card stack" style={{ gap: 10 }}>
+      <div className="row between" style={{ alignItems: "flex-start" }}>
+        <div><h3>Access</h3><p className="small muted" style={{ marginTop: 2 }}>{openForClass ? "Open for the whole class." : early.length ? `Locked for the class; open early for ${early.length} student${early.length === 1 ? "" : "s"}.` : "Locked. Students see it as coming soon."}</p></div>
+        <div className="row">
+          {openForClass ? <button className="btn ghost" disabled={busy} onClick={() => setClass(false)}>Lock for class</button> : <button className="btn" disabled={busy} onClick={() => setClass(true)}>Unlock for class</button>}
+          {!openForClass && <button className="btn ghost sm" onClick={() => setPickEarly(p => !p)}>{pickEarly ? "Done" : "Early access…"}</button>}
+        </div>
+      </div>
+      <div className="row" style={{ gap: 6 }}>{checks.map(([ok, l]) => <span key={l} className={`pill ${ok ? "good" : "warn"}`}>{ok ? "✓" : "•"} {l}</span>)}</div>
+      {!openForClass && pickEarly && <div>
+        <span className="eyebrow">Open early for</span>
+        <div className="chips" style={{ marginTop: 6 }}>{students.map(st => <button key={st.id} className={early.includes(st.id) ? "on" : ""} disabled={busy} onClick={() => toggleEarly(st.id)}>{st.full_name}</button>)}</div>
+        {!students.length && <div className="small muted">No students on the roster yet.</div>}
+      </div>}
     </div>
   );
 }
@@ -70,17 +115,17 @@ function Importer({ sel, current, onDone, toast }: { sel: string; current?: Sess
   );
 }
 
-function Verify({ row, onDone, toast }: { row: ContentRow; onDone: () => Promise<void>; toast: (m: string) => void }) {
-  const [checks, setChecks] = useState<Record<string, boolean>>({}); const [note, setNote] = useState("");
-  useEffect(() => { setChecks({}); setNote(""); }, [row.session_id, row.updated_at]);
-  const all = CHECKS.every(([k]) => checks[k]);
+function Verify({ row }: { row: ContentRow }) {
+  const v = row.content.verified;
   return (
-    <div className="card stack">
-      <div className="row between"><h3>Daily verification</h3>{row.verified_at && <span className="small muted">Last verified {new Date(row.verified_at).toLocaleString()}</span>}</div>
-      <p className="small muted">Run this the day of class, after the live check. All five must be true to mark verified.</p>
-      {CHECKS.map(([k, label]) => <label key={k} className="row" style={{ gap: 10, alignItems: "flex-start", cursor: "pointer" }}><input type="checkbox" checked={!!checks[k]} onChange={e => setChecks({ ...checks, [k]: e.target.checked })} /><span className="small">{label}</span></label>)}
-      <input id="verify-note" placeholder="What you checked and anything that changed, e.g. 'Gemini free tier confirmed; Teachable Machine URL unchanged'" value={note} onChange={e => setNote(e.target.value)} />
-      <div><button className="btn" disabled={!all || !note.trim()} onClick={async () => { try { await store.setVerification(row.session_id, { checks, note: note.trim() }); await onDone(); toast("Marked verified"); } catch (e) { toast("Could not save: " + describe(e)); } }}>Mark verified for today</button></div>
+    <div className="card stack" style={{ gap: 8 }}>
+      <div className="row between"><h3>Verification</h3>{v ? <span className="pill good">Checked at build on {v.date}</span> : <span className="pill bad">No stamp</span>}</div>
+      <p className="small muted">Live checks (tools and free tiers, links, facts and dates, every answer, guide match) are run by the build before this file is generated. Nothing to do here; re-import a newer file if something changed.</p>
+      {v && <>
+        <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>{v.checks.map((c, i) => <li key={i}>{c}</li>)}</ul>
+        <div className="small"><b>What changed:</b> {v.note}</div>
+        {v.sources && v.sources.length > 0 && <div className="row small muted" style={{ gap: 6 }}><span>Checked against:</span>{v.sources.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer" className="pill" style={{ textDecoration: "none" }}>{new URL(u).hostname.replace(/^www\./, "")} ↗</a>)}</div>}
+      </>}
       <div className="row small muted" style={{ gap: 6 }}><span>Tools in this session:</span>{(row.content.tools || []).map(t => <a key={t.name} href={t.url} target="_blank" rel="noreferrer" className="pill acc" style={{ textDecoration: "none" }}>{t.name} ↗</a>)}</div>
     </div>
   );

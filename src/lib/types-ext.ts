@@ -40,7 +40,6 @@ export type Attendance = { student_id: string; session_id: string; status: "pres
 export interface StoreContent {
   allContent(): Promise<ContentRow[]>;
   saveContent(session_id: string, content: SessionContent, version_note: string): Promise<void>;
-  setVerification(session_id: string, v: { checks: Record<string, boolean>; note: string }): Promise<void>;
   materials(): Promise<Material[]>;
   addMaterial(m: { session_id: string; kind: Material["kind"]; title: string; file?: File; url?: string }): Promise<void>;
   deleteMaterial(id: number): Promise<void>;
