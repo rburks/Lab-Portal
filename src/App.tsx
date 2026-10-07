@@ -1,4 +1,4 @@
-import { Link, NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import { store } from "./lib/store";
 import SignIn from "./pages/SignIn";
@@ -13,6 +13,8 @@ import { useEffect, useState } from "react";
 
 function Shell() {
   const { user, loading, mode, setMode } = useAuth();
+  const loc = useLocation();
+  const onOffice = loc.pathname === "/calendar" && loc.search.includes("tab=office");
   if (loading) return <div className="page"><div className="empty">Loading…</div></div>;
   if (!user) return <SignIn />;
   const isInstr = user.role === "instructor";
@@ -30,7 +32,8 @@ function Shell() {
             <NavLink to="/instructor/content">Content</NavLink>
             <NavLink to="/instructor/attendance">Attendance</NavLink>
             <NavLink to="/instructor/roster">Roster</NavLink>
-            <NavLink to="/calendar">Calendar</NavLink>
+            <NavLink to="/calendar" className={({ isActive }) => isActive && !onOffice ? "active" : ""}>Calendar</NavLink>
+            <NavLink to="/calendar?tab=office" className={() => onOffice ? "active" : ""}>Office hours<PendingOH /></NavLink>
             <NavLink to="/messages">Messages<Unread /></NavLink>
           </> : <>
             <NavLink to="/" end>Course</NavLink>
@@ -69,6 +72,13 @@ function Unread() {
   const [n, setN] = useState(0);
   useEffect(() => { if (!user) return; const f = async () => { const m = await store.messages(user.role === "instructor" ? undefined : user.id); setN(m.filter(x => x.sender_id !== user.id && !x.read_at).length); }; f(); const t = setInterval(f, 30000); return () => clearInterval(t); }, [user]);
   return n ? <span className="pill acc" style={{ marginLeft: 6, padding: "0 7px" }}>{n}</span> : null;
+}
+
+function PendingOH() {
+  const { user } = useAuth();
+  const [n, setN] = useState(0);
+  useEffect(() => { if (!user) return; const f = async () => { const r = await store.ohRequests(); setN(r.filter(x => x.status === "pending").length); }; f(); const t = setInterval(f, 30000); return () => clearInterval(t); }, [user]);
+  return n ? <span className="pill warn" style={{ marginLeft: 6, padding: "0 7px" }}>{n}</span> : null;
 }
 
 function DemoSwitcher() {
