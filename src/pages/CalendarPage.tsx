@@ -1,26 +1,28 @@
 // Calendar page: course schedule by month. Students see dates and book office hours.
 // Instructor adds holidays and buffer days (which push later sessions back) and manages slots.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../auth";
 import { store, type CalendarDay, type CourseSettings, type OHRequest, type Profile, type Slot } from "../lib/store";
 import { buildSchedule, fmtLong, fmtTime, iso, nextDates, parse, WEEKDAYS, type ScheduledDay } from "../lib/schedule";
 
 export default function CalendarPage() {
-  const { user, toast } = useAuth();
-  const isInstr = user?.role === "instructor";
+  const { user, toast, mode } = useAuth();
+  const isInstr = user?.role === "instructor" && mode === "instructor";
   const [settings, setSettings] = useState<CourseSettings | null>(null);
   const [days, setDays] = useState<CalendarDay[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [reqs, setReqs] = useState<OHRequest[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [tab, setTab] = useState<"schedule" | "office">("schedule");
+  const loc = useLocation();
+  const [tab, setTab] = useState<"schedule" | "office">(() => loc.search.includes("tab=office") ? "office" : "schedule");
+  useEffect(() => { setTab(loc.search.includes("tab=office") ? "office" : "schedule"); }, [loc.search]);
   const [view, setView] = useState<"month" | "list">("month");
   const reload = useCallback(async () => {
     const [s, d, sl, r] = await Promise.all([store.settings(), store.calendarDays(), store.slots(), store.ohRequests()]);
     setSettings(s); setDays(d); setSlots(sl); setReqs(r);
-    if (isInstr) setProfiles(await store.allProfiles());
-  }, [isInstr]);
+    if (user?.role === "instructor") setProfiles(await store.allProfiles());
+  }, [user?.role]);
   useEffect(() => { reload(); }, [reload]);
   const schedule = useMemo(() => settings ? buildSchedule(settings, days) : [], [settings, days]);
   if (!settings) return <div className="empty">Loading calendar…</div>;
@@ -37,8 +39,6 @@ export default function CalendarPage() {
       {tab === "schedule" && view === "month" && <MonthView schedule={schedule} days={days} reqs={reqs} isInstr={!!isInstr} onChange={async (d) => { await store.setCalendarDay(d); await reload(); toast("Calendar updated"); }} />}
       {tab === "schedule" && view === "list" && <Schedule schedule={schedule} days={days} isInstr={!!isInstr} onChange={async (d) => { await store.setCalendarDay(d); await reload(); toast("Calendar updated"); }} />}
       {tab === "office" ? <OfficeHours slots={slots} reqs={reqs} profiles={profiles} isInstr={!!isInstr} userId={user!.id} reload={reload} toast={toast} /> : null}
-      {false && <Schedule schedule={schedule} days={days} isInstr={!!isInstr} onChange={async () => {}} />
-}
     </>
   );
 }
@@ -84,7 +84,7 @@ function OfficeHours({ slots, reqs, profiles, isInstr, userId, reload, toast }: 
   const [custom, setCustom] = useState<{ date: string; time: string } | null>(null);
   const [newSlot, setNewSlot] = useState<Omit<Slot, "id"> | null>(null);
   const name = (id: string) => profiles.find(p => p.id === id)?.full_name || "Student";
-  const taken = (slot: Slot, date: string) => reqs.filter(r => r.slot_id === slot.id && r.requested_at.startsWith(date) && (r.status === "pending" || r.status === "accepted")).length >= slot.capacity;
+  const taken = (slot: Slot, date: string) => reqs.filter(r => r.slot_id === slot.id && r.requested_at.startsWith(date) && (r.status === "pending" || r.status === "accepted" || r.status === "proposed")).length >= slot.capacity;
   const submit = async () => {
     if (!topic.trim()) return toast("Add a sentence about what you want to cover");
     if (pick) await store.requestOH({ slot_id: pick.slot.id, requested_at: `${pick.date}T${pick.slot.start_time}:00`, topic: topic.trim() });
@@ -93,6 +93,21 @@ function OfficeHours({ slots, reqs, profiles, isInstr, userId, reload, toast }: 
     setTopic(""); setPick(null); setCustom(null); await reload(); toast("Request sent");
   };
   const mine = reqs.filter(r => isInstr || r.student_id === userId).sort((a, b) => a.requested_at.localeCompare(b.requested_at));
+  const pending = mine.filter(r => r.status === "pending");
+  // Every instructor decision also drops a message in the student's thread so they see it without checking the calendar.
+  const notify = async (r: OHRequest, body: string) => { try { await store.sendMessage(r.student_id, body); } catch { /* message is a courtesy; the request state is what matters */ } };
+  const act = async (r: OHRequest, a: Act) => {
+    try {
+      if (a.kind === "accept") { await store.updateOH(r.id, { status: "accepted", instructor_note: null }); await notify(r, `Office hours confirmed: ${when(r.requested_at)}. Topic: ${r.topic}`); toast("Accepted and student notified"); }
+      else if (a.kind === "decline") { await store.updateOH(r.id, { status: "declined", instructor_note: a.note || null }); await notify(r, `I can't do office hours at ${when(r.requested_at)}.${a.note ? " " + a.note : ""} Feel free to request another time from the Calendar.`); toast("Declined and student notified"); }
+      else if (a.kind === "propose") { await store.updateOH(r.id, { status: "proposed", proposed_at: a.at, instructor_note: a.note || null }); await notify(r, `About your office hours request for ${when(r.requested_at)}: could you do ${when(a.at)} instead?${a.note ? " " + a.note : ""} Accept or decline it under Calendar, Office hours.`); toast("Proposal sent"); }
+      else if (a.kind === "done") { await store.updateOH(r.id, { status: "done" }); toast("Marked done"); }
+      else if (a.kind === "cancel") { await store.updateOH(r.id, { status: "cancelled" }); toast("Cancelled"); }
+      else if (a.kind === "takeProposal") { await store.updateOH(r.id, { status: "accepted", requested_at: r.proposed_at!, proposed_at: null }); toast(`Confirmed for ${when(r.proposed_at!)}`); }
+      else if (a.kind === "refuseProposal") { await store.updateOH(r.id, { status: "cancelled" }); toast("Okay, request closed. You can send a new one any time."); }
+      await reload();
+    } catch (e) { toast("Couldn't update: " + (e as Error).message + ". If this says 'violates check constraint', run the October 7 SQL section."); }
+  };
   return (
     <div className="stack" style={{ gap: 14 }}>
       {isInstr ? (
@@ -122,26 +137,55 @@ function OfficeHours({ slots, reqs, profiles, isInstr, userId, reload, toast }: 
           <div><button className="btn" onClick={submit}>{pick ? `Book ${fmtLong(pick.date)} ${fmtTime(pick.slot.start_time)}` : custom?.date ? `Request ${fmtLong(custom.date)} ${fmtTime(custom.time)}` : "Send request"}</button></div>
         </div>
       )}
-      <div className="card"><h3>{isInstr ? "Requests" : "Your requests"}</h3>
-        <div className="stack" style={{ gap: 8, marginTop: 10 }}>{mine.map(r => (
-          <div key={r.id} className="sub" style={{ gridTemplateColumns: "minmax(0,1fr) auto" }}>
-            <div style={{ minWidth: 0 }}><div className="row" style={{ gap: 8 }}>{isInstr && <b>{name(r.student_id)}</b>}<span className="mono small">{fmtLong(r.requested_at.slice(0, 10))} {fmtTime(r.requested_at.slice(11, 16))}</span><span className={`pill ${r.status === "accepted" ? "good" : r.status === "declined" || r.status === "cancelled" ? "bad" : r.status === "done" ? "" : "warn"}`}>{r.status}</span>{!r.slot_id && <span className="pill">custom time</span>}</div>
-              <div className="small" style={{ marginTop: 4 }}>{r.topic}</div>{r.instructor_note && <div className="small muted">Note: {r.instructor_note}</div>}</div>
-            <div className="row" style={{ gap: 6 }}>
-              {isInstr && r.status === "pending" && <><button className="btn sm" onClick={async () => { await store.updateOH(r.id, { status: "accepted" }); await reload(); toast("Accepted"); }}>Accept</button><DeclineBtn onDecline={async (note) => { await store.updateOH(r.id, { status: "declined", instructor_note: note || null }); await reload(); }} /></>}
-              {isInstr && r.status === "accepted" && <button className="btn ghost sm" onClick={async () => { await store.updateOH(r.id, { status: "done" }); await reload(); }}>Mark done</button>}
-              {!isInstr && (r.status === "pending" || r.status === "accepted") && <button className="btn ghost xs" onClick={async () => { await store.updateOH(r.id, { status: "cancelled" }); await reload(); }}>Cancel</button>}
-            </div>
-          </div>))}{!mine.length && <div className="small muted">No requests yet.</div>}</div>
+      <div className="card"><div className="row between"><h3>{isInstr ? "Requests" : "Your requests"}</h3>{isInstr && pending.length > 0 && <span className="pill warn">{pending.length} waiting on you</span>}</div>
+        {isInstr && <p className="small muted" style={{ marginTop: 2 }}>Accept, decline with a note, or propose a different time. The student gets a message in their thread either way.</p>}
+        <div className="stack" style={{ gap: 8, marginTop: 10 }}>{mine.map(r => <RequestRow key={r.id} r={r} isInstr={isInstr} name={name(r.student_id)} onAct={act} />)}{!mine.length && <div className="small muted">No requests yet.</div>}</div>
       </div>
     </div>
   );
 }
 
-function DeclineBtn({ onDecline }: { onDecline: (note: string) => Promise<void> }) {
-  const [open, setOpen] = useState(false); const [note, setNote] = useState("");
-  if (!open) return <button className="btn ghost sm" onClick={() => setOpen(true)}>Decline</button>;
-  return <div className="row" style={{ gap: 6 }}><input placeholder="Optional note, e.g. another time" value={note} onChange={e => setNote(e.target.value)} style={{ width: 200, padding: "5px 8px" }} /><button className="btn sm danger" onClick={() => onDecline(note)}>Confirm</button><button className="btn ghost sm" onClick={() => setOpen(false)}>Back</button></div>;
+const STATUS_LABEL: Record<OHRequest["status"], string> = { pending: "waiting for Roland", accepted: "confirmed", declined: "declined", done: "done", cancelled: "cancelled", proposed: "new time proposed" };
+const when = (ts: string) => `${fmtLong(ts.slice(0, 10))} ${fmtTime(ts.slice(11, 16))}`;
+
+type Act = { kind: "accept" } | { kind: "decline"; note: string } | { kind: "propose"; at: string; note: string } | { kind: "done" } | { kind: "cancel" } | { kind: "takeProposal" } | { kind: "refuseProposal" };
+function RequestRow({ r, isInstr, name, onAct }: { r: OHRequest; isInstr: boolean; name: string; onAct: (r: OHRequest, a: Act) => Promise<void> }) {
+  const [open, setOpen] = useState<null | "decline" | "propose">(null);
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState(r.requested_at.slice(0, 10));
+  const [time, setTime] = useState(r.requested_at.slice(11, 16));
+  const [busy, setBusy] = useState(false);
+  const go = async (a: Act) => { setBusy(true); try { await onAct(r, a); setOpen(null); setNote(""); } finally { setBusy(false); } };
+  const pillCls = r.status === "accepted" || r.status === "done" ? "good" : r.status === "declined" || r.status === "cancelled" ? "bad" : "warn";
+  return (
+    <div className="sub" style={{ gridTemplateColumns: "minmax(0,1fr)", gap: 8 }}>
+      <div className="row between" style={{ alignItems: "flex-start" }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="row" style={{ gap: 8 }}>{isInstr && <b>{name}</b>}<span className="mono small">{when(r.requested_at)}</span><span className={`pill ${pillCls}`}>{STATUS_LABEL[r.status]}</span>{!r.slot_id && <span className="pill">custom time</span>}</div>
+          <div className="small" style={{ marginTop: 4 }}>{r.topic}</div>
+          {r.status === "proposed" && r.proposed_at && <div className="see-box small" style={{ marginTop: 6 }}><b>{isInstr ? "You proposed" : "Roland proposed"} {when(r.proposed_at)}.</b> {r.instructor_note && <span>{r.instructor_note}</span>} {isInstr && <span className="muted">Waiting for the student to accept.</span>}</div>}
+          {r.status !== "proposed" && r.instructor_note && <div className="small muted" style={{ marginTop: 4 }}>Note from Roland: {r.instructor_note}</div>}
+        </div>
+        <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+          {isInstr && r.status === "pending" && !open && <><button className="btn sm" disabled={busy} onClick={() => go({ kind: "accept" })}>Accept</button><button className="btn ghost sm" disabled={busy} onClick={() => setOpen("propose")}>Propose new time</button><button className="btn ghost sm" disabled={busy} onClick={() => setOpen("decline")}>Decline</button></>}
+          {isInstr && r.status === "proposed" && !open && <><button className="btn ghost sm" disabled={busy} onClick={() => setOpen("propose")}>Change proposal</button><button className="btn ghost sm" disabled={busy} onClick={() => setOpen("decline")}>Decline</button></>}
+          {isInstr && r.status === "accepted" && <button className="btn ghost sm" disabled={busy} onClick={() => go({ kind: "done" })}>Mark done</button>}
+          {!isInstr && r.status === "proposed" && <><button className="btn sm" disabled={busy} onClick={() => go({ kind: "takeProposal" })}>Accept new time</button><button className="btn ghost sm" disabled={busy} onClick={() => go({ kind: "refuseProposal" })}>Doesn't work</button></>}
+          {!isInstr && (r.status === "pending" || r.status === "accepted") && <button className="btn ghost xs" disabled={busy} onClick={() => go({ kind: "cancel" })}>Cancel</button>}
+        </div>
+      </div>
+      {open === "decline" && <div className="row" style={{ gap: 6, alignItems: "flex-end" }}>
+        <label className="stack" style={{ gap: 4, flex: 1, minWidth: 200 }}><span className="eyebrow">Note to the student (optional)</span><input id={`dn-${r.id}`} placeholder="e.g. I'm out that day; try Thursday" value={note} onChange={e => setNote(e.target.value)} /></label>
+        <button className="btn sm danger" disabled={busy} onClick={() => go({ kind: "decline", note })}>Confirm decline</button><button className="btn ghost sm" onClick={() => setOpen(null)}>Back</button>
+      </div>}
+      {open === "propose" && <div className="row" style={{ gap: 6, alignItems: "flex-end" }}>
+        <label className="stack" style={{ gap: 4, width: "auto" }}><span className="eyebrow">Date</span><input id={`pd-${r.id}`} type="date" value={date} onChange={e => setDate(e.target.value)} style={{ width: "auto" }} /></label>
+        <label className="stack" style={{ gap: 4, width: "auto" }}><span className="eyebrow">Time</span><input id={`pt-${r.id}`} type="time" value={time} onChange={e => setTime(e.target.value)} style={{ width: "auto" }} /></label>
+        <label className="stack" style={{ gap: 4, flex: 1, minWidth: 180 }}><span className="eyebrow">Note (optional)</span><input id={`pn-${r.id}`} placeholder="e.g. Same Zoom link" value={note} onChange={e => setNote(e.target.value)} /></label>
+        <button className="btn sm" disabled={busy || !date || !time} onClick={() => go({ kind: "propose", at: `${date}T${time}:00`, note })}>Send proposal</button><button className="btn ghost sm" onClick={() => setOpen(null)}>Back</button>
+      </div>}
+    </div>
+  );
 }
 
 function MonthView({ schedule, days, reqs, isInstr, onChange }: { schedule: ScheduledDay[]; days: CalendarDay[]; reqs: OHRequest[]; isInstr: boolean; onChange: (d: CalendarDay | { day: string; remove: true }) => Promise<void> }) {
@@ -155,7 +199,7 @@ function MonthView({ schedule, days, reqs, isInstr, onChange }: { schedule: Sche
   const cells: (string | null)[] = [...Array(startPad).fill(null), ...Array.from({ length: dim }, (_, i) => `${ym}-${String(i + 1).padStart(2, "0")}`)];
   while (cells.length % 7) cells.push(null);
   const byDate = new Map(schedule.map(d => [d.date, d]));
-  const ohByDate = new Map<string, OHRequest[]>(); reqs.filter(r => r.status === "accepted" || r.status === "pending").forEach(r => { const k = r.requested_at.slice(0, 10); ohByDate.set(k, [...(ohByDate.get(k) || []), r]); });
+  const ohByDate = new Map<string, OHRequest[]>(); reqs.filter(r => r.status === "accepted" || r.status === "pending" || r.status === "proposed").forEach(r => { const k = r.requested_at.slice(0, 10); ohByDate.set(k, [...(ohByDate.get(k) || []), r]); });
   const shift = (n: number) => { const d = new Date(y, m - 1 + n, 1); setYm(iso(new Date(d.getFullYear(), d.getMonth(), 1, 12))); };
   const label = new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
   return (

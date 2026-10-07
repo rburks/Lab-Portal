@@ -3,6 +3,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import { SESSIONS, WEEKS, type Session } from "../content/course";
 import { useAuth } from "../auth";
 import { store, type Attendance, type ContentRow, type Grade, type Profile, type Progress, type Release, type Submission } from "../lib/store";
+import type { OHRequest } from "../lib/store";
 import { ContentPage, AttendancePage } from "./ContentPage";
 import { computeStats, download, fmtDate, initials, isUnlocked, labPct, sessionState, STATE_LABEL, toCSV, type SessionState, type StudentStat } from "../lib/logic";
 
@@ -65,6 +66,7 @@ function Overview({ d }: { d: Data }) {
           {struggling.map(s => <PersonRow key={s.profile.id} s={s} right={<div className="stack" style={{ gap: 3, alignItems: "flex-end" }}>{s.flags.map(f => <span key={f} className="pill warn">{f}</span>)}</div>} />)}
           {!struggling.length && <div className="empty small">Nobody flagged. Nice.</div>}
         </div>
+        <OHCard />
         <div className="card"><div className="row between"><h3>Grading queue</h3><NavLink to="/instructor/grid?status=submitted" className="small">Open in grid →</NavLink></div>
           <p className="small muted" style={{ margin: "4px 0 8px" }}>Most recent submissions without a score.</p>
           {[...ungraded].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8).map(s => { const p = d.profiles.find(x => x.id === s.student_id); const se = SESSIONS.find(x => x.id === s.session_id)!; return (
@@ -216,6 +218,18 @@ function ReleasePanel({ d, reload }: { d: Data; reload: () => Promise<void> }) {
 }
 
 // ---------- Roster ----------
+function OHCard() {
+  const [reqs, setReqs] = useState<OHRequest[]>([]);
+  useEffect(() => { store.ohRequests().then(setReqs); }, []);
+  const pending = reqs.filter(r => r.status === "pending" || r.status === "proposed");
+  return (
+    <div className="card"><div className="row between"><h3>Office hours</h3><NavLink to="/calendar?tab=office" className="small">Open office hours</NavLink></div>
+      {pending.length ? <div className="stack" style={{ gap: 6, marginTop: 8 }}>{pending.slice(0, 5).map(r => <div key={r.id} className="row between small" style={{ padding: "6px 0", borderBottom: "1px solid var(--line)" }}><span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.requested_at.slice(5, 10).replace("-", "/")} {r.requested_at.slice(11, 16)} · {r.topic}</span><span className={`pill ${r.status === "pending" ? "warn" : ""}`}>{r.status === "pending" ? "needs reply" : "awaiting student"}</span></div>)}</div>
+        : <div className="small muted" style={{ marginTop: 8 }}>No requests waiting.</div>}
+    </div>
+  );
+}
+
 function Roster({ d, reload }: { d: Data; reload: () => Promise<void> }) {
   const { toast } = useAuth();
   const [rows, setRows] = useState<{ email: string; full_name: string | null; role: "student" | "instructor" }[]>([]);
