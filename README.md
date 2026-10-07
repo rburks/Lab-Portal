@@ -50,7 +50,7 @@ Open the local URL. With no `.env` file the app runs in demo mode with 12 exampl
 
 Push to `main` and Netlify redeploys. If the schema changed (check the bottom of `supabase/schema.sql` for dated sections), paste that dated section into the Supabase SQL editor and run it. All sections are safe to re-run.
 
-October 6 additions: `calendar_days`, `office_hour_slots`, `office_hour_requests`, `messages`, `announcements`, `flashcards`, `course_settings`, a `responses` column on `progress`, and (second batch) `session_content`, `session_materials`, `attendance`, plus a public `materials` storage bucket. Third batch (exam guide): `due`, `streak`, `obj` on `flashcards`, and `mock_attempts`. October 7: `proposed` status and `proposed_at` on `office_hour_requests`.
+October 6 additions: `calendar_days`, `office_hour_slots`, `office_hour_requests`, `messages`, `announcements`, `flashcards`, `course_settings`, a `responses` column on `progress`, and (second batch) `session_content`, `session_materials`, `attendance`, plus a public `materials` storage bucket. Third batch (exam guide): `due`, `streak`, `obj` on `flashcards`, and `mock_attempts`. October 7: `proposed` status and `proposed_at` on `office_hour_requests`. October 7 batch 2: `rubric` on grades, `showcase`, `capstones`, `capstone_milestones`, `portfolios` (plus a public `portfolio` bucket), `notify_prefs`, `notify_log`, and `email_on` on course settings.
 
 ## Guided labs
 
@@ -82,6 +82,42 @@ If the official guide changes, update `objectives.json` and the `first` session 
 ## Office hours
 
 Students book a recurring slot or propose a custom time, with a topic. The instructor works from **Office hours** in the nav (badge shows how many are waiting) or the dashboard card: **Accept**, **Decline** with a note, or **Propose new time**, which sends the student a counter-offer they accept or decline from their own Calendar. Every decision also posts a message in the student's thread. The Instructor / Student view toggle applies here too, so switching to Student view shows the booking form.
+
+## Exam readiness (instructor)
+
+**Class → Exam readiness** reads every student's saved mock attempts. Each student gets a status from their latest mock (Ready at 750 and up, Close at 700 to 749, Not yet under 700, or No mock), their best score, trend, accuracy by domain, and their three weakest objectives. Above that, "What the class misses most" lists the objectives with the highest miss rate and links to the session to reteach. Scores are the portal's straight-line estimate, so watch the trend more than the number.
+
+## Lab showcase
+
+Students share one of their own submissions with a one-line caption, from the session's Submit tab or the **Showcase** page. Classmates see first name and last initial only. You can feature or hide anything from **Class → Showcase**. Shared screenshots become visible to classmates only while the item is shared and not hidden.
+
+## Rubrics and drafted feedback
+
+Every lab's JSON carries a `rubric`: 3 to 6 items that add to 100 points, each with two "what worked" lines and two "what to fix" lines in your voice. In the grading drawer, tick what's there and the score follows. **Draft from rubric** writes a two-sentence note: one thing that worked (quoting the student's own checkpoint answer where it can) and the most valuable thing to fix. No AI is involved; it assembles lines written ahead of time and varies the phrasing per student. Edit it before saving. Students see the rubric breakdown with their grade.
+
+## Capstone tracker
+
+Seven milestones from the curriculum (stakeholder, proposal, architecture, core build, eval and red team, handoff, presentation), each with due dates from the calendar. Students submit a link and a note under **My work → Capstone**. You review from **Class → Capstone**: approve, or send back with a note. Students can only ever mark their own milestones as submitted.
+
+## Portfolio pages
+
+Under **My work → Portfolio**, students build a public page: headline, bio, their capstone, selected lab work (screenshots are copied into a public `portfolio` bucket), LinkedIn, and their AWS badge link once they pass. Nothing is public until they click Publish. The page lives at `/p/their-name` and opens without signing in, so it can go on a resume.
+
+## Email notifications
+
+Off until you turn them on. Students get a short email when a session unlocks, a grade posts, you reply to a message, you review a capstone milestone, or you post an announcement. You get one when a student messages you or requests office hours. Message emails are limited to one per thread every 30 minutes. Students can opt out under **Messages → Email**.
+
+Supabase Edge Functions can't send email directly (outbound mail ports are blocked), so the function hands messages to a mail provider. Two options:
+
+- **Gmail through Google Apps Script (default, no domain needed).** Sends from your own Gmail. A personal Gmail account can send to 100 recipients a day this way, which covers 20 students.
+- **Resend (only if you own a domain).** Set `MAIL_PROVIDER=resend` and verify your domain in Resend.
+
+Setup, about 15 minutes:
+
+1. **Apps Script relay.** Open script.google.com → New project → paste `email/Mailer.gs`. Project Settings → Script properties → add `SECRET` with a long random string. Deploy → New deployment → Web app, Execute as **Me**, Who has access **Anyone**. Approve the permissions. Copy the Web app URL (ends in `/exec`).
+2. **Edge Function.** In Supabase, Edge Functions → Deploy a new function → Via Editor. Name it exactly `notify`. Replace the code with `supabase/functions/notify/index.ts`. Deploy.
+3. **Secrets.** Edge Functions → Secrets. Add `PORTAL_URL` (your Netlify address), `MAIL_PROVIDER` = `gas`, `GAS_URL` (from step 1), `GAS_SECRET` (the same string as step 1).
+4. **Turn on and test.** In the portal, **Messages → Email → Turn on**, then **Send me a test email**. The Recent sends list shows each send and any error.
 
 ## Attendance
 
