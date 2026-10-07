@@ -80,6 +80,7 @@ input[type=radio], input[type=checkbox] { width: 18px; height: 18px; margin: 2px
 .topbar .in { max-width: 1240px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
 .brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: .9rem; }
+.brand .logo-svg { flex-shrink: 0; display: block; }
 .brand b { font-family: var(--display); font-weight: 600; }
 .nav { display: flex; gap: 4px; }
 .nav a { padding: 6px 10px; border-radius: var(--r-sm); text-decoration: none; color: var(--ink-2); font-weight: 500; }

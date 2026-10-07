@@ -1,4 +1,5 @@
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import Logo from "./components/Logo";
 import { AuthProvider, useAuth } from "./auth";
 import { store } from "./lib/store";
 import SignIn from "./pages/SignIn";
@@ -23,7 +24,7 @@ function Shell() {
     <>
       {store.demo && <div className="demo-banner">Demo mode: no backend connected. Data resets on reload. Switch users from the top right.</div>}
       <header className="topbar"><div className="in">
-        <Link to="/" className="brand"><span className="logo">S/AI</span><b>Software/AI Lab Portal</b></Link>
+        <Link to="/" className="brand"><Logo /><b>Software/AI Portal</b></Link>
         <nav className="nav">
           {instrMode ? <>
             <NavLink to="/instructor" end>Dashboard</NavLink>
