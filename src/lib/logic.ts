@@ -78,7 +78,8 @@ export function toCSV(rows: (string | number | null | undefined)[][]) {
   return rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
 }
 export function download(name: string, text: string) {
-  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = name; a.click(); URL.revokeObjectURL(a.href);
+  // The byte-order mark makes Excel read names with accents correctly when the CSV is double-clicked.
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" })); a.download = name; a.click(); URL.revokeObjectURL(a.href);
 }
 export const initials = (n: string) => n.split(/\s+/).map(x => x[0]).join("").slice(0, 2).toUpperCase();
 export const fmtDate = (iso: string | null) => iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
