@@ -200,7 +200,7 @@ function MonthView({ schedule, days, reqs, isInstr, onChange }: { schedule: Sche
   while (cells.length % 7) cells.push(null);
   const byDate = new Map(schedule.map(d => [d.date, d]));
   const ohByDate = new Map<string, OHRequest[]>(); reqs.filter(r => r.status === "accepted" || r.status === "pending" || r.status === "proposed").forEach(r => { const k = r.requested_at.slice(0, 10); ohByDate.set(k, [...(ohByDate.get(k) || []), r]); });
-  const shift = (n: number) => { const d = new Date(y, m - 1 + n, 1); setYm(iso(new Date(d.getFullYear(), d.getMonth(), 1, 12))); };
+  const shift = (n: number) => { const d = new Date(y, m - 1 + n, 1); setYm(iso(new Date(d.getFullYear(), d.getMonth(), 1, 12)).slice(0, 7)); };
   const label = new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
   return (
     <div className="card">

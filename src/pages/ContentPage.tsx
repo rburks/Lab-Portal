@@ -4,7 +4,7 @@ import { SESSIONS, WEEKS, diffContent, validateContent, type SessionContent } fr
 import { useAuth } from "../auth";
 import { store, type Attendance, type ContentRow, type Material, type Profile, type Release } from "../lib/store";
 import { buildSchedule, fmtLong, iso } from "../lib/schedule";
-import { download, fmtDate, initials } from "../lib/logic";
+import { download, fmtDate, initials, toCSV } from "../lib/logic";
 
 function describe(e: unknown): string {
   const m = (e as { message?: string; code?: string; details?: string })?.message || String(e);
@@ -163,8 +163,32 @@ export function AttendancePage() {
   const set = async (sid: string, st: Attendance["status"] | null) => { await store.setAttendance(sid, sel, st); setAtt(await store.attendance()); };
   const counts = { present: 0, late: 0, absent: 0 }; students.forEach(s => { const g = get(s.id); if (g) counts[g]++; });
   const s = SESSIONS.find(x => x.id === sel)!;
+  const LABEL = { present: "Present", late: "Late", absent: "Absent" } as const;
+  const stamp = iso(new Date());
+  const sorted = [...students].sort((a, b) => a.full_name.localeCompare(b.full_name));
+  const exportSession = () => {
+    const rows = sorted.map(st => { const g = get(st.id); return [st.full_name, st.email, `W${s.week} D${s.day}`, dateFor(sel) || "", s.title, g ? LABEL[g] : "Not marked"]; });
+    download(`attendance-w${s.week}d${s.day}-${stamp}.csv`, toCSV([["Student", "Email", "Session", "Date", "Title", "Status"], ...rows]));
+  };
+  const exportAll = () => {
+    // Every session that has happened (dated today or earlier) or already has marks, in course order.
+    const marked = new Set(att.map(a => a.session_id));
+    const cols = SESSIONS.filter(x => { const d = dateFor(x.id); return (d && d <= stamp) || marked.has(x.id); });
+    const head = ["Student", "Email", ...cols.map(x => `W${x.week} D${x.day}${dateFor(x.id) ? ` (${dateFor(x.id)})` : ""}`), "Present", "Late", "Absent", "Not marked", "Attendance %"];
+    const body = sorted.map(st => {
+      const vals = cols.map(x => att.find(a => a.student_id === st.id && a.session_id === x.id)?.status);
+      const n = { present: vals.filter(v => v === "present").length, late: vals.filter(v => v === "late").length, absent: vals.filter(v => v === "absent").length };
+      const total = n.present + n.late + n.absent;
+      return [st.full_name, st.email, ...vals.map(v => (v ? LABEL[v] : "")), n.present, n.late, n.absent, cols.length - total, total ? `${Math.round(100 * (n.present + n.late) / total)}%` : ""];
+    });
+    download(`attendance-all-${stamp}.csv`, toCSV([head, ...body]));
+  };
   return (
     <div className="stack" style={{ gap: 14 }}>
+      <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+        <button className="btn ghost sm" onClick={exportSession} disabled={!students.length}>Export this session</button>
+        <button className="btn ghost sm" onClick={exportAll} disabled={!students.length} title="One row per student, one column per session so far, with totals">Export full course</button>
+      </div>
       <div className="card row between">
         <div className="row"><label className="row" style={{ gap: 8 }}><span className="small muted">Session</span><select style={{ width: "auto" }} value={sel} onChange={e => setSel(e.target.value)}>{SESSIONS.map(x => <option key={x.id} value={x.id}>W{x.week} D{x.day} · {dateFor(x.id) ? fmtLong(dateFor(x.id)!) : ""} · {x.title.slice(0, 40)}</option>)}</select></label></div>
         <div className="row"><span className="pill good">{counts.present} present</span><span className="pill warn">{counts.late} late</span><span className="pill bad">{counts.absent} absent</span><span className="pill">{students.length - counts.present - counts.late - counts.absent} unmarked</span><button className="btn ghost sm" onClick={async () => { for (const st of students) if (!get(st.id)) await store.setAttendance(st.id, sel, "present"); setAtt(await store.attendance()); toast("Unmarked set to present"); }}>Mark rest present</button></div>
