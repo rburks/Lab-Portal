@@ -268,6 +268,21 @@ function Roster({ d, reload }: { d: Data; reload: () => Promise<void> }) {
   const [paste, setPaste] = useState("");
   const [busy, setBusy] = useState(false);
   const load = useCallback(async () => setRows(await store.roster()), []);
+  const [sending, setSending] = useState<Record<string, "sending" | "sent" | string>>({});
+  const signedIn = (email: string) => d.profiles.some(p => p.email.toLowerCase() === email);
+  const sendOne = async (email: string) => {
+    setSending(s => ({ ...s, [email]: "sending" }));
+    const r = await store.sendSignInLink(email);
+    setSending(s => ({ ...s, [email]: r.error ? r.error : "sent" }));
+    return r.error || null;
+  };
+  const notYet = rows.filter(r => r.role === "student" && !signedIn(r.email));
+  const sendAll = async () => {
+    if (!notYet.length || !confirm(`Email a sign-in link to ${notYet.length} student${notYet.length === 1 ? "" : "s"} who haven't signed in yet?`)) return;
+    let ok = 0;
+    for (const r of notYet) { if (!(await sendOne(r.email))) ok++; await new Promise(res => setTimeout(res, 1200)); } // spaced out so Supabase doesn't throttle
+    toast(ok === notYet.length ? `Sign-in links sent to ${ok}` : `Sent ${ok} of ${notYet.length}. Check the red notes in the table.`);
+  };
   useEffect(() => { load(); }, [load]);
   const validEmail = (e: string) => /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(e.trim());
   const existing = new Set(rows.map(r => r.email));
@@ -314,14 +329,19 @@ function Roster({ d, reload }: { d: Data; reload: () => Promise<void> }) {
           <div><button className="btn" disabled={busy || !paste.trim()} onClick={addPaste}>{busy ? "Adding…" : "Add to roster"}</button></div>
         </>}
       </div>
-      <div className="card"><h3>Roster ({rows.length})</h3>
+      <div className="card"><div className="row between"><h3>Roster ({rows.length})</h3>
+          <button className="btn sm" disabled={!notYet.length || Object.values(sending).includes("sending")} onClick={sendAll} title="Emails each student a fresh sign-in link from your Gmail">{notYet.length ? `Send sign-in links to ${notYet.length} not signed in` : "Everyone has signed in"}</button></div>
         <div className="grid-wrap"><table className="grid" style={{ marginTop: 8 }}><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Signed in</th><th>Absences</th><th></th></tr></thead><tbody>
           {rows.map(r => { const prof = d.profiles.find(p => p.email.toLowerCase() === r.email); return (
             <tr key={r.email}><td>{r.full_name || prof?.full_name || <span className="muted">—</span>}</td><td className="mono small">{r.email}</td>
               <td>{prof ? <select style={{ width: "auto", padding: "3px 6px" }} value={prof.role} onChange={async e => { await store.setRole(prof.id, e.target.value as "student" | "instructor"); await reload(); toast("Role updated"); }}><option value="student">Student</option><option value="instructor">Instructor</option></select> : <span className="pill">{r.role}</span>}</td>
               <td>{prof ? <span className="pill good">Yes</span> : <span className="pill">Not yet</span>}</td>
               <td>{(() => { const n = prof ? d.attendance.filter(a => a.student_id === prof.id && a.status === "absent").length : 0; return n ? <span className={`pill ${n >= 2 ? "bad" : "warn"}`}>{n}</span> : <span className="muted">0</span>; })()}</td>
-              <td><button className="btn ghost xs" onClick={async () => { await store.removeFromRoster(r.email); await load(); toast("Removed"); }}>Remove</button></td></tr>); })}
+              <td><div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                {(() => { const st = sending[r.email]; return st === "sending" ? <span className="small muted">Sending…</span> : st === "sent" ? <span className="pill good" title="Ask them to use the newest email">Link sent</span> : <>
+                  {st && <span className="pill bad" title={st}>Failed</span>}
+                  <button className="btn ghost xs" title={st || "Email this student a sign-in link"} onClick={async () => { const err = await sendOne(r.email); toast(err ? `Couldn't send: ${err}` : `Sign-in link sent to ${r.email}`); }}>{st ? "Retry" : "Send link"}</button></>; })()}
+                <button className="btn ghost xs" onClick={async () => { await store.removeFromRoster(r.email); await load(); toast("Removed"); }}>Remove</button></div></td></tr>); })}
         </tbody></table></div></div>
     </div>
   );
