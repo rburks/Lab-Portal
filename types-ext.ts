@@ -1,8 +1,8 @@
 // Types and store methods for calendar, office hours, messages, announcements, flashcards.
-export type CourseSettings = { start_date: string; class_days: number[] };
+export type CourseSettings = { start_date: string; class_days: number[]; email_on?: boolean; showcase_posting?: boolean; showcase_comments?: boolean };
 export type CalendarDay = { day: string; kind: "holiday" | "buffer"; label: string | null };
 export type Slot = { id: number; weekday: number; start_time: string; minutes: number; capacity: number; location: string | null; active: boolean };
-export type OHRequest = { id: number; student_id: string; slot_id: number | null; requested_at: string; topic: string; status: "pending" | "accepted" | "declined" | "done" | "cancelled"; instructor_note: string | null; created_at: string };
+export type OHRequest = { id: number; student_id: string; slot_id: number | null; requested_at: string; topic: string; status: "pending" | "accepted" | "declined" | "done" | "cancelled" | "proposed"; instructor_note: string | null; proposed_at?: string | null; created_at: string };
 export type Message = { id: number; thread_student_id: string; sender_id: string; body: string; created_at: string; read_at: string | null };
 export type Announcement = { id: number; title: string; body: string; pinned: boolean; created_at: string };
 export type Flashcard = { term_key: string; status: "known" | "review"; due?: string; streak?: number; obj?: string | null };
@@ -18,7 +18,7 @@ export interface StoreExt {
   deleteSlot(id: number): Promise<void>;
   ohRequests(): Promise<OHRequest[]>;           // own for students, all for instructor
   requestOH(r: { slot_id: number | null; requested_at: string; topic: string }): Promise<void>;
-  updateOH(id: number, patch: Partial<Pick<OHRequest, "status" | "instructor_note">>): Promise<void>;
+  updateOH(id: number, patch: Partial<Pick<OHRequest, "status" | "instructor_note" | "proposed_at" | "requested_at">>): Promise<void>;
   messages(threadStudentId?: string): Promise<Message[]>;
   sendMessage(threadStudentId: string, body: string): Promise<void>;
   markRead(threadStudentId: string): Promise<void>;
@@ -40,10 +40,62 @@ export type Attendance = { student_id: string; session_id: string; status: "pres
 export interface StoreContent {
   allContent(): Promise<ContentRow[]>;
   saveContent(session_id: string, content: SessionContent, version_note: string): Promise<void>;
-  setVerification(session_id: string, v: { checks: Record<string, boolean>; note: string }): Promise<void>;
   materials(): Promise<Material[]>;
   addMaterial(m: { session_id: string; kind: Material["kind"]; title: string; file?: File; url?: string }): Promise<void>;
   deleteMaterial(id: number): Promise<void>;
   attendance(): Promise<Attendance[]>;
   setAttendance(student_id: string, session_id: string, status: Attendance["status"] | null): Promise<void>;
+}
+
+// ---------- October 7 additions: readiness, showcase, rubrics, capstone, portfolio, email ----------
+export type PostType = "lab" | "project" | "article" | "idea" | "video" | "resource" | "question";
+export type ReactionKey = "like" | "learned" | "fire" | "question" | "clap";
+// A Showcase post. Lab shares carry a submission (kind/body/url come from it); other posts carry title/text/link/images.
+export type ShowcaseItem = { id: number; submission_id: number | null; student_id: string; session_id: string | null; caption: string | null; hidden: boolean; featured: boolean; created_at: string;
+  kind: "image" | "link" | "text" | null; body: string | null; url?: string; author: string; author_role?: string;
+  post_type: PostType; title: string | null; text: string | null; link_url: string | null; images: string[]; image_urls?: string[]; pinned: boolean; comments_locked: boolean;
+  reactions: Record<ReactionKey, number>; my_reactions: ReactionKey[]; comment_count: number };
+export type ShowcaseComment = { id: number; post_id: number; author_id: string; body: string; hidden: boolean; created_at: string; author: string; author_role?: string };
+export type NewPost = { post_type: Exclude<PostType, "lab">; title: string; text: string; link_url: string; images: Blob[] };
+export type ModeratePatch = { hidden?: boolean; featured?: boolean; pinned?: boolean; comments_locked?: boolean };
+export type CapstoneRow = { student_id: string; title: string | null; stakeholder: string | null; problem: string | null; updated_at?: string };
+export type MilestoneStatus = "not_started" | "submitted" | "revise" | "approved";
+export type MilestoneRow = { student_id: string; milestone: string; status: MilestoneStatus; link: string | null; note: string | null; instructor_note: string | null; updated_at?: string };
+export type PortfolioItem = { title: string; blurb: string; url?: string; image?: string };
+export type Portfolio = { student_id: string; slug: string; published: boolean; display_name: string | null; headline: string | null; bio: string | null; location: string | null; linkedin: string | null; credly: string | null; email_public: string | null; capstone: { title: string; summary: string } | null; items: PortfolioItem[]; updated_at?: string };
+export type NotifyKind = "test" | "unlock" | "announcement" | "grade" | "message" | "oh_request" | "capstone";
+export type NotifyLog = { id: number; kind: string; recipients: number; ok: boolean; error: string | null; created_at: string };
+export type FlashcardRow = { student_id: string; term_key: string; status: string; streak: number | null; obj: string | null };
+
+export interface StoreMore {
+  allMocks(): Promise<MockAttempt[]>;
+  allFlashcards(): Promise<FlashcardRow[]>;
+  showcase(): Promise<ShowcaseItem[]>;
+  share(submission_id: number, caption: string): Promise<void>;
+  unshare(id: number): Promise<void>;
+  moderate(id: number, patch: ModeratePatch): Promise<void>;
+  createPost(p: NewPost): Promise<void>;
+  deletePost(id: number): Promise<void>;
+  react(post_id: number, emoji: ReactionKey, on: boolean): Promise<void>;
+  comments(post_id: number): Promise<ShowcaseComment[]>;
+  addComment(post_id: number, body: string): Promise<void>;
+  deleteComment(id: number): Promise<void>;
+  hideComment(id: number, hidden: boolean): Promise<void>;
+  showcaseMutes(): Promise<string[]>;
+  setMute(student_id: string, muted: boolean): Promise<void>;
+  capstones(): Promise<CapstoneRow[]>;                 // own for students, all for instructor
+  saveCapstone(c: Omit<CapstoneRow, "student_id" | "updated_at">): Promise<void>;
+  milestones(): Promise<MilestoneRow[]>;
+  submitMilestone(m: { milestone: string; link: string; note: string }): Promise<void>;
+  reviewMilestone(m: { student_id: string; milestone: string; status: MilestoneStatus; instructor_note: string }): Promise<void>;
+  myPortfolio(): Promise<Portfolio | null>;
+  allPortfolios(): Promise<Portfolio[]>;
+  savePortfolio(p: Omit<Portfolio, "student_id" | "updated_at">): Promise<void>;
+  publicPortfolio(slug: string): Promise<Portfolio | null>;
+  portfolioImage(file: Blob): Promise<string>;           // upload, returns public URL
+  submissionToPortfolioImage(file_path: string): Promise<string>;
+  notify(kind: NotifyKind, payload?: Record<string, unknown>): Promise<{ ok: boolean; error?: string; skipped?: string }>;
+  notifyPrefs(): Promise<{ opt_out: boolean }>;
+  setNotifyPrefs(opt_out: boolean): Promise<void>;
+  notifyLog(): Promise<NotifyLog[]>;
 }
