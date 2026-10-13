@@ -170,7 +170,7 @@ class SupaStore implements Store {
   async allFlashcards() { const { data } = await this.sb.from("flashcards").select("student_id,term_key,status,streak,obj"); return (data || []) as FlashcardRow[]; }
   async showcase() {
     const { data: { user } } = await this.sb.auth.getUser();
-    const { data, error } = await this.sb.from("showcase").select("*, submission:submissions(kind,body,file_path), author:profiles(full_name,role)").order("created_at", { ascending: false });
+    const { data, error } = await this.sb.from("showcase").select("*, submission:submissions(kind,body,file_path), author:profiles!showcase_student_id_fkey(full_name,role)").order("created_at", { ascending: false });
     if (error) throw error;
     type Row = ShowcaseItem & { submission: { kind: ShowcaseItem["kind"]; body: string | null; file_path: string | null } | null; author: unknown };
     const rows = (data || []) as unknown as Row[];
@@ -219,7 +219,7 @@ class SupaStore implements Store {
     if (error && !/duplicate/i.test(error.message)) throw error;
   }
   async comments(post_id: number) {
-    const { data, error } = await this.sb.from("showcase_comments").select("*, author:profiles(full_name,role)").eq("post_id", post_id).order("created_at"); if (error) throw error;
+    const { data, error } = await this.sb.from("showcase_comments").select("*, author:profiles!showcase_comments_author_id_fkey(full_name,role)").eq("post_id", post_id).order("created_at"); if (error) throw error;
     return ((data || []) as (ShowcaseComment & { author: unknown })[]).map(c => { const a = c.author as unknown as { full_name: string; role: string } | null; return { ...c, author: a?.role === "instructor" ? a.full_name : shortName(a?.full_name || "Classmate"), author_role: a?.role }; });
   }
   async addComment(post_id: number, body: string) {
