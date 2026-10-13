@@ -73,7 +73,7 @@ export default function Showcase({ embedded = false }: { embedded?: boolean }) {
   return (
     <>
       {!embedded && <div className="hero"><div><span className="eyebrow">The class feed</span><h1>Showcase</h1><p className="muted">Post projects, articles, ideas, videos, and questions. React and comment on classmates' posts. Classmates see your first name and last initial.</p></div></div>}
-      {err && <div className="tip-box small" style={{ marginBottom: 12 }}><b>The showcase couldn't load.</b> {/column|relation|does not exist/i.test(err) ? "The October 12 Showcase database section hasn't been run yet. Paste it into the Supabase SQL editor." : err}</div>}
+      {err && <div className="tip-box small" style={{ marginBottom: 12 }}><b>The showcase couldn't load.</b> {/column .* does not exist|relation .* does not exist/i.test(err) ? "The October 12 Showcase database section hasn't been run yet. Paste it into the Supabase SQL editor." : null} <span className="muted">Details: {err}</span></div>}
       <div className="feed">
         {isInstr && <Controls settings={settings} mutes={mutes} onChange={after} />}
         {!isInstr && (!postingOn || muted) && <div className="tip-box small">{muted ? "Your instructor has paused posting for your account. You can still react. Message them if you're not sure why." : "Posting is paused for the class right now. You can still react and comment."}</div>}
