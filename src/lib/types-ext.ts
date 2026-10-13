@@ -1,5 +1,5 @@
 // Types and store methods for calendar, office hours, messages, announcements, flashcards.
-export type CourseSettings = { start_date: string; class_days: number[]; email_on?: boolean };
+export type CourseSettings = { start_date: string; class_days: number[]; email_on?: boolean; showcase_posting?: boolean; showcase_comments?: boolean };
 export type CalendarDay = { day: string; kind: "holiday" | "buffer"; label: string | null };
 export type Slot = { id: number; weekday: number; start_time: string; minutes: number; capacity: number; location: string | null; active: boolean };
 export type OHRequest = { id: number; student_id: string; slot_id: number | null; requested_at: string; topic: string; status: "pending" | "accepted" | "declined" | "done" | "cancelled" | "proposed"; instructor_note: string | null; proposed_at?: string | null; created_at: string };
@@ -48,8 +48,16 @@ export interface StoreContent {
 }
 
 // ---------- October 7 additions: readiness, showcase, rubrics, capstone, portfolio, email ----------
-export type ShowcaseItem = { id: number; submission_id: number; student_id: string; session_id: string; caption: string | null; hidden: boolean; featured: boolean; created_at: string;
-  kind: "image" | "link" | "text"; body: string | null; url?: string; author: string };
+export type PostType = "lab" | "project" | "article" | "idea" | "video" | "resource" | "question";
+export type ReactionKey = "like" | "learned" | "fire" | "question" | "clap";
+// A Showcase post. Lab shares carry a submission (kind/body/url come from it); other posts carry title/text/link/images.
+export type ShowcaseItem = { id: number; submission_id: number | null; student_id: string; session_id: string | null; caption: string | null; hidden: boolean; featured: boolean; created_at: string;
+  kind: "image" | "link" | "text" | null; body: string | null; url?: string; author: string; author_role?: string;
+  post_type: PostType; title: string | null; text: string | null; link_url: string | null; images: string[]; image_urls?: string[]; pinned: boolean; comments_locked: boolean;
+  reactions: Record<ReactionKey, number>; my_reactions: ReactionKey[]; comment_count: number };
+export type ShowcaseComment = { id: number; post_id: number; author_id: string; body: string; hidden: boolean; created_at: string; author: string; author_role?: string };
+export type NewPost = { post_type: Exclude<PostType, "lab">; title: string; text: string; link_url: string; images: Blob[] };
+export type ModeratePatch = { hidden?: boolean; featured?: boolean; pinned?: boolean; comments_locked?: boolean };
 export type CapstoneRow = { student_id: string; title: string | null; stakeholder: string | null; problem: string | null; updated_at?: string };
 export type MilestoneStatus = "not_started" | "submitted" | "revise" | "approved";
 export type MilestoneRow = { student_id: string; milestone: string; status: MilestoneStatus; link: string | null; note: string | null; instructor_note: string | null; updated_at?: string };
@@ -65,7 +73,16 @@ export interface StoreMore {
   showcase(): Promise<ShowcaseItem[]>;
   share(submission_id: number, caption: string): Promise<void>;
   unshare(id: number): Promise<void>;
-  moderate(id: number, patch: { hidden?: boolean; featured?: boolean }): Promise<void>;
+  moderate(id: number, patch: ModeratePatch): Promise<void>;
+  createPost(p: NewPost): Promise<void>;
+  deletePost(id: number): Promise<void>;
+  react(post_id: number, emoji: ReactionKey, on: boolean): Promise<void>;
+  comments(post_id: number): Promise<ShowcaseComment[]>;
+  addComment(post_id: number, body: string): Promise<void>;
+  deleteComment(id: number): Promise<void>;
+  hideComment(id: number, hidden: boolean): Promise<void>;
+  showcaseMutes(): Promise<string[]>;
+  setMute(student_id: string, muted: boolean): Promise<void>;
   capstones(): Promise<CapstoneRow[]>;                 // own for students, all for instructor
   saveCapstone(c: Omit<CapstoneRow, "student_id" | "updated_at">): Promise<void>;
   milestones(): Promise<MilestoneRow[]>;

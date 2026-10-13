@@ -1,7 +1,7 @@
 // Data layer. One interface, two implementations: Supabase (production) and Demo (in-memory, no backend).
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { SESSIONS, type Session } from "../content/course";
-import type { Announcement, Attendance, CalendarDay, CapstoneRow, ContentRow, CourseSettings, Flashcard, FlashcardRow, Material, Message, MilestoneRow, MilestoneStatus, MockAttempt, NotifyKind, NotifyLog, OHRequest, Portfolio, ShowcaseItem, Slot, StoreContent, StoreExt, StoreMore } from "./types-ext";
+import type { Announcement, Attendance, CalendarDay, CapstoneRow, ContentRow, CourseSettings, Flashcard, FlashcardRow, Material, Message, MilestoneRow, MilestoneStatus, MockAttempt, ModeratePatch, NewPost, NotifyKind, NotifyLog, OHRequest, Portfolio, ReactionKey, ShowcaseComment, ShowcaseItem, Slot, StoreContent, StoreExt, StoreMore } from "./types-ext";
 import type { SessionContent } from "../content/course";
 import w01d1 from "../../content/week01/w01d1.json";
 import w01d2 from "../../content/week01/w01d2.json";
@@ -14,7 +14,9 @@ export function scheduleCard(cur: Flashcard | undefined, got: boolean) {
 }
 // Classmates see first name and last initial only.
 export const shortName = (full: string) => { const p = full.trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[p.length - 1][0]}.` : p[0]; };
-export type { Announcement, Attendance, CalendarDay, CapstoneRow, ContentRow, CourseSettings, Flashcard, FlashcardRow, Material, Message, MilestoneRow, MilestoneStatus, MockAttempt, NotifyKind, NotifyLog, OHRequest, Portfolio, PortfolioItem, ShowcaseItem, Slot } from "./types-ext";
+export type { Announcement, Attendance, CalendarDay, CapstoneRow, ContentRow, CourseSettings, Flashcard, FlashcardRow, Material, Message, MilestoneRow, MilestoneStatus, MockAttempt, NewPost, NotifyKind, NotifyLog, OHRequest, Portfolio, PortfolioItem, PostType, ReactionKey, ShowcaseComment, ShowcaseItem, Slot } from "./types-ext";
+export const REACTIONS: { key: ReactionKey; emoji: string; label: string }[] = [{ key: "like", emoji: "👍", label: "Like" }, { key: "learned", emoji: "💡", label: "Learned something" }, { key: "fire", emoji: "🔥", label: "Impressive" }, { key: "question", emoji: "🤔", label: "Question" }, { key: "clap", emoji: "👏", label: "Applause" }];
+const noReactions = (): Record<ReactionKey, number> => ({ like: 0, learned: 0, fire: 0, question: 0, clap: 0 });
 
 export type Role = "student" | "instructor";
 export type Profile = { id: string; email: string; full_name: string; role: Role; created_at: string };
@@ -28,6 +30,7 @@ export interface Store extends StoreExt, StoreContent, StoreMore {
   // auth
   currentUser(): Promise<Profile | null>;
   signInWithEmail(email: string): Promise<{ error?: string }>;
+  sendSignInLink(email: string): Promise<{ error?: string }>;
   signOut(): Promise<void>;
   onAuthChange(cb: () => void): () => void;
   // student
@@ -68,6 +71,11 @@ class SupaStore implements Store {
   async signInWithEmail(email: string) {
     const { data: ok } = await this.sb.rpc("email_allowed", { e: email });
     if (ok === false) return { error: "That email isn't on the class roster. Check with your instructor." };
+    const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+    return error ? { error: error.message } : {};
+  }
+  // Instructor sends a student their sign-in link. Doesn't touch the instructor's own session.
+  async sendSignInLink(email: string) {
     const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
     return error ? { error: error.message } : {};
   }
@@ -118,7 +126,7 @@ class SupaStore implements Store {
   async signedUrl(path: string) { const { data } = await this.sb.storage.from("submissions").createSignedUrl(path, 3600); return data?.signedUrl || ""; }
 
   // ----- extension -----
-  async settings() { const { data } = await this.sb.from("course_settings").select("start_date,class_days,email_on").eq("id", 1).single(); return (data as CourseSettings) || { start_date: "2026-10-12", class_days: [1, 2, 4], email_on: false }; }
+  async settings() { const { data } = await this.sb.from("course_settings").select("*").eq("id", 1).single(); const d = data as (CourseSettings & { id?: number; updated_at?: string }) | null; if (!d) return { start_date: "2026-10-12", class_days: [1, 2, 4], email_on: false, showcase_posting: true, showcase_comments: true }; const { id: _i, updated_at: _u, ...rest } = d; void _i; void _u; return rest as CourseSettings; }
   async saveSettings(s: CourseSettings) { await this.sb.from("course_settings").upsert({ id: 1, ...s, updated_at: new Date().toISOString() }); }
   async calendarDays() { const { data } = await this.sb.from("calendar_days").select("day,kind,label").order("day"); return (data || []) as CalendarDay[]; }
   async setCalendarDay(d: CalendarDay | { day: string; remove: true }) { if ("remove" in d) await this.sb.from("calendar_days").delete().eq("day", d.day); else await this.sb.from("calendar_days").upsert(d, { onConflict: "day" }); }
@@ -161,22 +169,67 @@ class SupaStore implements Store {
   async allMocks() { const { data } = await this.sb.from("mock_attempts").select("*").order("created_at", { ascending: false }); return (data || []) as MockAttempt[]; }
   async allFlashcards() { const { data } = await this.sb.from("flashcards").select("student_id,term_key,status,streak,obj"); return (data || []) as FlashcardRow[]; }
   async showcase() {
-    const { data, error } = await this.sb.from("showcase").select("*, submission:submissions(kind,body,file_path), author:profiles(full_name)").order("created_at", { ascending: false });
+    const { data: { user } } = await this.sb.auth.getUser();
+    const { data, error } = await this.sb.from("showcase").select("*, submission:submissions(kind,body,file_path), author:profiles(full_name,role)").order("created_at", { ascending: false });
     if (error) throw error;
-    type Row = ShowcaseItem & { submission: { kind: ShowcaseItem["kind"]; body: string | null; file_path: string | null } | null; author: { full_name: string } | null };
+    type Row = ShowcaseItem & { submission: { kind: ShowcaseItem["kind"]; body: string | null; file_path: string | null } | null; author: unknown };
     const rows = (data || []) as unknown as Row[];
-    const paths = rows.map(r => r.submission?.file_path).filter((x): x is string => !!x);
-    const signed = paths.length ? (await this.sb.storage.from("submissions").createSignedUrls(paths, 3600)).data || [] : [];
-    const map = new Map(signed.map(d => [d.path, d.signedUrl]));
-    return rows.filter(r => r.submission).map(r => ({ ...r, kind: r.submission!.kind, body: r.submission!.body, url: r.submission!.file_path ? map.get(r.submission!.file_path) ?? undefined : undefined, author: shortName((r.author as unknown as { full_name: string } | null)?.full_name || "Classmate") })) as ShowcaseItem[];
+    const ids = rows.map(r => r.id);
+    const [{ data: rx }, { data: cm }] = ids.length ? await Promise.all([
+      this.sb.from("showcase_reactions").select("post_id,user_id,emoji").in("post_id", ids),
+      this.sb.from("showcase_comments").select("post_id").in("post_id", ids),
+    ]) : [{ data: [] }, { data: [] }];
+    const subPaths = rows.map(r => r.submission?.file_path).filter((x): x is string => !!x);
+    const subSigned = subPaths.length ? (await this.sb.storage.from("submissions").createSignedUrls(subPaths, 3600)).data || [] : [];
+    const imgPaths = rows.flatMap(r => r.images || []);
+    const imgSigned = imgPaths.length ? (await this.sb.storage.from("showcase").createSignedUrls(imgPaths, 3600)).data || [] : [];
+    const url = new Map([...subSigned, ...imgSigned].map(d => [d.path, d.signedUrl]));
+    return rows.filter(r => r.submission || r.post_type !== "lab").map(r => {
+      const a = r.author as unknown as { full_name: string; role: string } | null;
+      const reactions = noReactions(); const mine: ReactionKey[] = [];
+      ((rx || []) as { post_id: number; user_id: string; emoji: ReactionKey }[]).filter(x => x.post_id === r.id).forEach(x => { reactions[x.emoji]++; if (x.user_id === user?.id) mine.push(x.emoji); });
+      return { ...r, kind: r.submission?.kind ?? null, body: r.submission?.body ?? null, url: r.submission?.file_path ? url.get(r.submission.file_path) ?? undefined : undefined,
+        images: r.images || [], image_urls: (r.images || []).map(p => url.get(p) || "").filter(Boolean),
+        author: a?.role === "instructor" ? a.full_name : shortName(a?.full_name || "Classmate"), author_role: a?.role,
+        reactions, my_reactions: mine, comment_count: ((cm || []) as { post_id: number }[]).filter(x => x.post_id === r.id).length };
+    }) as ShowcaseItem[];
   }
   async share(submission_id: number, caption: string) {
     const { data: { user } } = await this.sb.auth.getUser(); if (!user) return;
     const { data: sub } = await this.sb.from("submissions").select("session_id").eq("id", submission_id).single();
-    const { error } = await this.sb.from("showcase").insert({ submission_id, student_id: user.id, session_id: sub?.session_id, caption: caption || null }); if (error) throw error;
+    const { error } = await this.sb.from("showcase").insert({ submission_id, student_id: user.id, session_id: sub?.session_id, caption: caption || null, post_type: "lab" }); if (error) throw friendlyPostError(error);
   }
   async unshare(id: number) { const { error } = await this.sb.from("showcase").delete().eq("id", id); if (error) throw error; }
-  async moderate(id: number, patch: { hidden?: boolean; featured?: boolean }) { const { error } = await this.sb.from("showcase").update(patch).eq("id", id); if (error) throw error; }
+  async moderate(id: number, patch: ModeratePatch) { const { error } = await this.sb.from("showcase").update(patch).eq("id", id); if (error) throw error; }
+  async createPost(p: NewPost) {
+    const { data: { user } } = await this.sb.auth.getUser(); if (!user) throw new Error("Not signed in");
+    const images: string[] = [];
+    for (const b of p.images) { const path = `${user.id}/${Date.now()}-${images.length}.jpg`; const { error } = await this.sb.storage.from("showcase").upload(path, b, { contentType: "image/jpeg" }); if (error) throw error; images.push(path); }
+    const { error } = await this.sb.from("showcase").insert({ student_id: user.id, post_type: p.post_type, title: p.title, text: p.text || null, link_url: p.link_url || null, images });
+    if (error) { if (images.length) await this.sb.storage.from("showcase").remove(images); throw friendlyPostError(error); }
+  }
+  async deletePost(id: number) {
+    const { data } = await this.sb.from("showcase").select("images").eq("id", id).single();
+    const { error } = await this.sb.from("showcase").delete().eq("id", id); if (error) throw error;
+    const imgs = (data as { images: string[] } | null)?.images || []; if (imgs.length) await this.sb.storage.from("showcase").remove(imgs);
+  }
+  async react(post_id: number, emoji: ReactionKey, on: boolean) {
+    const { data: { user } } = await this.sb.auth.getUser(); if (!user) return;
+    const { error } = on ? await this.sb.from("showcase_reactions").insert({ post_id, user_id: user.id, emoji }) : await this.sb.from("showcase_reactions").delete().eq("post_id", post_id).eq("user_id", user.id).eq("emoji", emoji);
+    if (error && !/duplicate/i.test(error.message)) throw error;
+  }
+  async comments(post_id: number) {
+    const { data, error } = await this.sb.from("showcase_comments").select("*, author:profiles(full_name,role)").eq("post_id", post_id).order("created_at"); if (error) throw error;
+    return ((data || []) as (ShowcaseComment & { author: unknown })[]).map(c => { const a = c.author as unknown as { full_name: string; role: string } | null; return { ...c, author: a?.role === "instructor" ? a.full_name : shortName(a?.full_name || "Classmate"), author_role: a?.role }; });
+  }
+  async addComment(post_id: number, body: string) {
+    const { data: { user } } = await this.sb.auth.getUser(); if (!user) return;
+    const { error } = await this.sb.from("showcase_comments").insert({ post_id, author_id: user.id, body }); if (error) throw friendlyPostError(error, true);
+  }
+  async deleteComment(id: number) { const { error } = await this.sb.from("showcase_comments").delete().eq("id", id); if (error) throw error; }
+  async hideComment(id: number, hidden: boolean) { const { error } = await this.sb.from("showcase_comments").update({ hidden }).eq("id", id); if (error) throw error; }
+  async showcaseMutes() { const { data } = await this.sb.from("showcase_mutes").select("student_id"); return ((data || []) as { student_id: string }[]).map(x => x.student_id); }
+  async setMute(student_id: string, muted: boolean) { const { error } = muted ? await this.sb.from("showcase_mutes").upsert({ student_id }) : await this.sb.from("showcase_mutes").delete().eq("student_id", student_id); if (error) throw error; }
   async capstones() { const { data } = await this.sb.from("capstones").select("*"); return (data || []) as CapstoneRow[]; }
   async saveCapstone(c: Omit<CapstoneRow, "student_id" | "updated_at">) { const { data: { user } } = await this.sb.auth.getUser(); if (!user) return; const { error } = await this.sb.from("capstones").upsert({ student_id: user.id, ...c, updated_at: new Date().toISOString() }, { onConflict: "student_id" }); if (error) throw error; }
   async milestones() { const { data } = await this.sb.from("capstone_milestones").select("*"); return (data || []) as MilestoneRow[]; }
@@ -236,7 +289,7 @@ function seedDemo() {
     });
   });
   const releases: Release[] = [{ session_id: "w01d1", student_id: null, unlocked_at: "" }, { session_id: "w01d2", student_id: null, unlocked_at: "" }, { session_id: "w01d3", student_id: null, unlocked_at: "" }];
-  const settings: CourseSettings = { start_date: "2026-10-12", class_days: [1, 2, 4], email_on: false };
+  const settings: CourseSettings = { start_date: "2026-10-12", class_days: [1, 2, 4], email_on: false, showcase_posting: true, showcase_comments: true };
   const calendar: CalendarDay[] = [{ day: "2026-11-26", kind: "holiday", label: "Thanksgiving" }, { day: "2026-12-22", kind: "holiday", label: "Winter break" }, { day: "2026-12-24", kind: "holiday", label: "Winter break" }, { day: "2026-12-29", kind: "holiday", label: "Winter break" }, { day: "2026-12-31", kind: "holiday", label: "Winter break" }];
   const slots: Slot[] = [{ id: 1, weekday: 2, start_time: "17:00", minutes: 15, capacity: 1, location: "Zoom (link in announcement)", active: true }, { id: 2, weekday: 2, start_time: "17:15", minutes: 15, capacity: 1, location: "Zoom (link in announcement)", active: true }, { id: 3, weekday: 2, start_time: "17:30", minutes: 15, capacity: 1, location: "Zoom (link in announcement)", active: true }, { id: 4, weekday: 4, start_time: "17:30", minutes: 15, capacity: 1, location: "Classroom, before class", active: true }];
   const oh: OHRequest[] = [{ id: 1, student_id: "u2", slot_id: 1, requested_at: "2026-10-13T17:00:00", topic: "I keep getting different answers from the three assistants and don't know which to trust.", status: "pending", instructor_note: null, created_at: new Date().toISOString() }, { id: 2, student_id: "u8", slot_id: null, requested_at: "2026-10-14T12:00:00", topic: "Missed Day 2. Can we go over Teachable Machine?", status: "pending", instructor_note: null, created_at: new Date().toISOString() }];
@@ -259,7 +312,24 @@ function seedDemo() {
     }
   });
   mocks.sort((x, y) => (y.created_at || "").localeCompare(x.created_at || ""));
-  const showcase: ShowcaseItem[] = submissions.filter((_, j) => j % 4 === 0).slice(0, 6).map((x, j) => ({ id: j + 1, submission_id: x.id, student_id: x.student_id, session_id: x.session_id, caption: ["My model learned the desk, not the mug. Here's the sentence that explains it.", "Three assistants, one question about my warehouse job. Gemini was the most confident and the most wrong.", "My confusion matrix. Recall dropped from 0.9 to 0.7 when I moved one count.", "Turns out 'formal' means something different to me and my partner.", "Spam filter vs smoke detector: which mistake costs more in my job.", "Sorting eight applications was harder than it looked."][j], hidden: false, featured: j === 0, created_at: x.created_at, kind: x.kind, body: x.body, author: shortName(profiles.find(p => p.id === x.student_id)!.full_name) }));
+  const showcase: ShowcaseItem[] = submissions.filter((_, j) => j % 4 === 0).slice(0, 6).map((x, j) => ({ id: j + 1, submission_id: x.id, student_id: x.student_id, session_id: x.session_id, caption: ["My model learned the desk, not the mug. Here's the sentence that explains it.", "Three assistants, one question about my warehouse job. Gemini was the most confident and the most wrong.", "My confusion matrix. Recall dropped from 0.9 to 0.7 when I moved one count.", "Turns out 'formal' means something different to me and my partner.", "Spam filter vs smoke detector: which mistake costs more in my job.", "Sorting eight applications was harder than it looked."][j], hidden: false, featured: j === 0, created_at: x.created_at, kind: x.kind, body: x.body, author: shortName(profiles.find(p => p.id === x.student_id)!.full_name), post_type: "lab" as const, title: null, text: null, link_url: null, images: [], pinned: false, comments_locked: false, reactions: noReactions(), my_reactions: [], comment_count: 0 }));
+  const ago = (h: number) => new Date(Date.now() - h * 3600e3).toISOString();
+  const post = (id: number, student_id: string, post_type: ShowcaseItem["post_type"], title: string, text: string, link_url: string | null, h: number, extra: Partial<ShowcaseItem> = {}): ShowcaseItem => ({ id, submission_id: null, student_id, session_id: null, caption: null, hidden: false, featured: false, created_at: ago(h), kind: null, body: null, author: "", post_type, title, text, link_url, images: [], pinned: false, comments_locked: false, reactions: noReactions(), my_reactions: [], comment_count: 0, ...extra });
+  showcase.unshift(
+    post(101, "u-instr", "question", "Show us one task you'd hand to an AI tomorrow", "Post one task from your current job you'd trust an AI with, and one you never would. Comment on two classmates' posts with a question.", null, 2, { pinned: true }),
+    post(102, "u1", "project", "I rebuilt my team's shift-swap form with a no-code automation", "Before: a group text and a spreadsheet nobody updated. After: a form, a sheet, and an email to the manager. Took one evening. Still deciding whether an AI step adds anything.", null, 5),
+    post(103, "u2", "video", "Short explainer: why classifiers cheat", "This 5-minute video made the skew trap from Day 2 click for me.", "https://www.youtube.com/watch?v=aircAruvnKk", 9),
+    post(104, "u3", "article", "Plain-English read on how LLMs predict the next word", "Good companion to Week 2. No math needed.", "https://www.anthropic.com/research", 20),
+    post(105, "u4", "idea", "Idea: an AI checklist for warehouse safety walk-throughs", "Photos in, missing-guardrail flags out. Is this a classification problem or object detection?", null, 30),
+  );
+  const reactions: { post_id: number; user_id: string; emoji: ReactionKey }[] = [];
+  [[101, "u1", "like"], [101, "u2", "like"], [101, "u3", "clap"], [102, "u2", "fire"], [102, "u3", "fire"], [102, "u4", "like"], [102, "u-instr", "clap"], [103, "u1", "learned"], [103, "u4", "learned"], [105, "u1", "question"], [1, "u2", "learned"]].forEach(([post_id, user_id, emoji]) => reactions.push({ post_id: post_id as number, user_id: user_id as string, emoji: emoji as ReactionKey }));
+  const comments: (Omit<ShowcaseComment, "author" | "author_role">)[] = [
+    { id: 1, post_id: 102, author_id: "u2", body: "Did your manager actually start using it? That's always the hard part for us.", hidden: false, created_at: ago(4) },
+    { id: 2, post_id: 102, author_id: "u1", body: "Two weeks in, yes. The email step is what sold her.", hidden: false, created_at: ago(3) },
+    { id: 3, post_id: 105, author_id: "u-instr", body: "Great question for Week 2. If you only need 'guardrail missing yes or no', classification. If you need to point at where, object detection.", hidden: false, created_at: ago(25) },
+  ];
+  const showcaseMutes: string[] = [];
   const capstones: CapstoneRow[] = [{ student_id: "u1", title: "Intake triage assistant for a physical therapy clinic", stakeholder: "Front desk manager, Riverbend PT", problem: "Staff spend about 6 hours a week sorting web inquiries by insurance, urgency, and location." }, { student_id: "u3", title: "Grant deadline tracker for a food bank", stakeholder: "Development director", problem: "Deadlines live in five inboxes and two were missed last year." }];
   const milestones: MilestoneRow[] = [{ student_id: "u1", milestone: "stakeholder", status: "approved", link: null, note: "Met with the front desk manager on Oct 2.", instructor_note: "Good fit. Real pain, measurable." }, { student_id: "u1", milestone: "proposal", status: "submitted", link: "https://docs.google.com/document/d/example", note: "Requirements and ROI case attached.", instructor_note: null }, { student_id: "u3", milestone: "stakeholder", status: "submitted", link: null, note: "Interview booked for next week.", instructor_note: null }];
   const portfolios: Portfolio[] = [{ student_id: "u1", slug: "dana-reyes", published: true, display_name: "Dana Reyes", headline: "Operations coordinator moving into AI automation", bio: "Ten years running front-office operations. I build small, measurable AI tools that take repetitive work off busy teams.", location: "Huntsville, AL", linkedin: "https://www.linkedin.com/", credly: null, email_public: null, capstone: { title: "Intake triage assistant for a physical therapy clinic", summary: "Sorts web inquiries by insurance, urgency, and location so the front desk starts each day with a ranked list." }, items: [{ title: "Three assistants, one question", blurb: "Compared ChatGPT, Claude, and Gemini on a real reporting task and marked every error." }, { title: "Breaking a classifier on purpose", blurb: "Trained an image model, then skewed its data to show how it learns shortcuts." }] }];
@@ -268,7 +338,7 @@ function seedDemo() {
   const content: ContentRow[] = [["w01d1", w01d1], ["w01d2", w01d2], ["w01d3", w01d3]].map(([id, c], i) => ({ session_id: id as string, content: c as unknown as SessionContent, version_note: "Built Oct 6, 2026", updated_at: new Date(Date.now() - 86400e3).toISOString(), verified_at: i === 0 ? new Date().toISOString() : i === 1 ? new Date(Date.now() - 86400e3 * 4).toISOString() : null, verification: i < 2 ? { checks: { tools: true, links: true, facts: true, quiz: true, guide: true }, note: "Free tiers confirmed on vendor pricing pages." } : null }));
   const materials: Material[] = [{ id: 1, session_id: "w01d1", kind: "student_guide", title: "Week 1 Day 1 Student Guide", file_path: null, url: "#", created_at: new Date().toISOString() }, { id: 2, session_id: "w01d1", kind: "slides", title: "Slides (Gamma)", file_path: null, url: "https://gamma.app", created_at: new Date().toISOString() }];
   const attendance: Attendance[] = [];
-  return { content, materials, attendance, settings, calendar, slots, oh, msgs, anns, flashcards, mocks, showcase, capstones, milestones, portfolios, notifyLog, notifyPrefs, profiles, progress, grades, submissions, releases, roster: profiles.map(p => ({ email: p.email, full_name: p.full_name as string | null, role: p.role })) };
+  return { content, materials, attendance, settings, calendar, slots, oh, msgs, anns, flashcards, mocks, showcase, capstones, milestones, portfolios, notifyLog, notifyPrefs, reactions, comments, showcaseMutes, profiles, progress, grades, submissions, releases, roster: profiles.map(p => ({ email: p.email, full_name: p.full_name as string | null, role: p.role })) };
 }
 
 class DemoStore implements Store {
@@ -279,6 +349,7 @@ class DemoStore implements Store {
   private emit() { this.listeners.forEach(f => f()); }
   demoSwitchUser(id: string) { this.me = id; this.emit(); }
   async currentUser() { return this.d.profiles.find(p => p.id === this.me) || null; }
+  async sendSignInLink(_email: string) { void _email; return {}; }
   async signInWithEmail(email: string) { const p = this.d.profiles.find(p => p.email === email.toLowerCase()); if (!p) return { error: "Demo mode: use one of the example emails, or click a demo user." }; this.me = p.id; this.emit(); return {}; }
   async signOut() { this.me = null; this.emit(); }
   onAuthChange(cb: () => void) { this.listeners.add(cb); return () => { this.listeners.delete(cb); }; }
@@ -345,10 +416,35 @@ class DemoStore implements Store {
   // ----- October 7 -----
   async allMocks() { return this.d.mocks; }
   async allFlashcards() { return this.d.flashcards.map(f => ({ student_id: "u1", term_key: f.term_key, status: f.status, streak: f.streak ?? null, obj: f.obj ?? null })); }
-  async showcase() { const instr = this.d.profiles.find(p => p.id === this.me)?.role === "instructor"; return this.d.showcase.filter(x => !x.hidden || instr || x.student_id === this.me).map(x => ({ ...x, url: this.d.submissions.find(s => s.id === x.submission_id)?.url })); }
-  async share(submission_id: number, caption: string) { const sub = this.d.submissions.find(s => s.id === submission_id); if (!sub) return; if (this.d.showcase.some(x => x.submission_id === submission_id)) throw new Error("Already shared"); this.d.showcase.unshift({ id: Date.now(), submission_id, student_id: this.me!, session_id: sub.session_id, caption: caption || null, hidden: false, featured: false, created_at: new Date().toISOString(), kind: sub.kind, body: sub.body, url: sub.url, author: shortName(this.d.profiles.find(p => p.id === this.me)!.full_name) }); }
+  private isInstr() { return this.d.profiles.find(p => p.id === this.me)?.role === "instructor"; }
+  private nameOf(id: string) { const p = this.d.profiles.find(x => x.id === id); return p?.role === "instructor" ? p.full_name : shortName(p?.full_name || "Classmate"); }
+  async showcase() {
+    const instr = this.isInstr();
+    return this.d.showcase.filter(x => !x.hidden || instr || x.student_id === this.me).map(x => {
+      const reactions = noReactions(); const mine: ReactionKey[] = [];
+      this.d.reactions.filter(r => r.post_id === x.id).forEach(r => { reactions[r.emoji]++; if (r.user_id === this.me) mine.push(r.emoji); });
+      return { ...x, url: this.d.submissions.find(s => s.id === x.submission_id)?.url, author: this.nameOf(x.student_id), author_role: this.d.profiles.find(p => p.id === x.student_id)?.role, image_urls: x.images, reactions, my_reactions: mine, comment_count: this.d.comments.filter(c => c.post_id === x.id && (!c.hidden || instr)).length };
+    });
+  }
+  async share(submission_id: number, caption: string) { const sub = this.d.submissions.find(s => s.id === submission_id); if (!sub) return; if (this.d.showcase.some(x => x.submission_id === submission_id)) throw new Error("Already shared"); this.d.showcase.unshift({ id: Date.now(), submission_id, student_id: this.me!, session_id: sub.session_id, caption: caption || null, hidden: false, featured: false, created_at: new Date().toISOString(), kind: sub.kind, body: sub.body, url: sub.url, author: "", post_type: "lab", title: null, text: null, link_url: null, images: [], pinned: false, comments_locked: false, reactions: noReactions(), my_reactions: [], comment_count: 0 }); }
   async unshare(id: number) { this.d.showcase = this.d.showcase.filter(x => x.id !== id); }
-  async moderate(id: number, patch: { hidden?: boolean; featured?: boolean }) { const x = this.d.showcase.find(y => y.id === id); if (x) Object.assign(x, patch); }
+  async moderate(id: number, patch: ModeratePatch) { const x = this.d.showcase.find(y => y.id === id); if (x) Object.assign(x, patch); }
+  async createPost(p: NewPost) {
+    if (!this.isInstr() && (this.d.settings.showcase_posting === false || this.d.showcaseMutes.includes(this.me!))) throw new Error("Posting is paused right now. Your instructor can turn it back on.");
+    this.d.showcase.unshift({ id: Date.now(), submission_id: null, student_id: this.me!, session_id: null, caption: null, hidden: false, featured: false, created_at: new Date().toISOString(), kind: null, body: null, author: "", post_type: p.post_type, title: p.title, text: p.text || null, link_url: p.link_url || null, images: p.images.map(b => URL.createObjectURL(b)), pinned: false, comments_locked: false, reactions: noReactions(), my_reactions: [], comment_count: 0 });
+  }
+  async deletePost(id: number) { this.d.showcase = this.d.showcase.filter(x => x.id !== id); this.d.comments = this.d.comments.filter(c => c.post_id !== id); this.d.reactions = this.d.reactions.filter(r => r.post_id !== id); }
+  async react(post_id: number, emoji: ReactionKey, on: boolean) { this.d.reactions = this.d.reactions.filter(r => !(r.post_id === post_id && r.user_id === this.me && r.emoji === emoji)); if (on) this.d.reactions.push({ post_id, user_id: this.me!, emoji }); }
+  async comments(post_id: number) { const instr = this.isInstr(); return this.d.comments.filter(c => c.post_id === post_id && (!c.hidden || instr || c.author_id === this.me)).map(c => ({ ...c, author: this.nameOf(c.author_id), author_role: this.d.profiles.find(p => p.id === c.author_id)?.role })); }
+  async addComment(post_id: number, body: string) {
+    const post = this.d.showcase.find(x => x.id === post_id);
+    if (!this.isInstr() && (this.d.settings.showcase_comments === false || post?.comments_locked || this.d.showcaseMutes.includes(this.me!))) throw new Error("Comments are turned off for this post or for the class right now.");
+    this.d.comments.push({ id: Date.now(), post_id, author_id: this.me!, body, hidden: false, created_at: new Date().toISOString() });
+  }
+  async deleteComment(id: number) { this.d.comments = this.d.comments.filter(c => c.id !== id); }
+  async hideComment(id: number, hidden: boolean) { const c = this.d.comments.find(x => x.id === id); if (c) c.hidden = hidden; }
+  async showcaseMutes() { return [...this.d.showcaseMutes]; }
+  async setMute(student_id: string, muted: boolean) { this.d.showcaseMutes = this.d.showcaseMutes.filter(x => x !== student_id); if (muted) this.d.showcaseMutes.push(student_id); }
   async capstones() { const instr = this.d.profiles.find(p => p.id === this.me)?.role === "instructor"; return this.d.capstones.filter(c => instr || c.student_id === this.me); }
   async saveCapstone(c: Omit<CapstoneRow, "student_id" | "updated_at">) { this.d.capstones = this.d.capstones.filter(x => x.student_id !== this.me); this.d.capstones.push({ student_id: this.me!, ...c }); }
   async milestones() { const instr = this.d.profiles.find(p => p.id === this.me)?.role === "instructor"; return this.d.milestones.filter(m => instr || m.student_id === this.me); }
@@ -364,6 +460,12 @@ class DemoStore implements Store {
   async notifyPrefs() { return { opt_out: !!this.d.notifyPrefs[this.me!] }; }
   async setNotifyPrefs(opt_out: boolean) { this.d.notifyPrefs[this.me!] = opt_out; }
   async notifyLog() { return this.d.notifyLog; }
+}
+
+// Row-level security refusals arrive as a generic policy error. Say what actually happened.
+function friendlyPostError(e: { message: string }, comment = false) {
+  if (/row-level security|violates/i.test(e.message)) return new Error(comment ? "Comments are turned off for this post or for the class right now." : "Posting is paused right now. Your instructor can turn it back on.");
+  return new Error(e.message);
 }
 
 // supabase-js hides the function's reply behind "Edge Function returned a non-2xx status code".
