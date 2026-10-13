@@ -104,7 +104,7 @@ function Submit({ s, subs, reload, toast }: { s: Session; subs: Submission[]; re
   const fileRef = useRef<HTMLInputElement>(null);
   const [shareId, setShareId] = useState<number | null>(null);
   const [shared, setShared] = useState<Set<number>>(new Set());
-  useEffect(() => { store.showcase().then(items => setShared(new Set(items.map(i => i.submission_id)))).catch(() => {}); }, [subs.length]);
+  useEffect(() => { store.showcase().then(items => setShared(new Set(items.map(i => i.submission_id).filter((x): x is number => x != null)))).catch(() => {}); }, [subs.length]);
   const upload = async (files: FileList | null) => {
     if (!files?.length) return; setBusy(true);
     try { for (const f of Array.from(files)) { if (!f.type.startsWith("image/")) continue; const blob = await compressImage(f); await store.addSubmission({ session_id: s.id, kind: "image", file: blob }); } await reload(); toast("Screenshot uploaded"); }
