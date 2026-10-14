@@ -1,7 +1,7 @@
 // Data layer. One interface, two implementations: Supabase (production) and Demo (in-memory, no backend).
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { SESSIONS, type Session } from "../content/course";
-import type { Announcement, Attendance, CalendarDay, CapstoneRow, ContentRow, CourseSettings, Flashcard, FlashcardRow, Material, Message, MilestoneRow, MilestoneStatus, MockAttempt, ModeratePatch, NewPost, NotifyKind, NotifyLog, OHRequest, Portfolio, ReactionKey, ShowcaseComment, ShowcaseItem, Slot, StoreContent, StoreExt, StoreMore } from "./types-ext";
+import type { Announcement, Attendance, CalendarDay, CapstoneRow, ContentRow, CourseSettings, Flashcard, FlashcardRow, Material, Message, MilestoneRow, MilestoneStatus, MockAttempt, ModeratePatch, NewPost, NotifyKind, NotifyLog, OHRequest, Portfolio, ReactionKey, ShowcaseComment, ShowcaseItem, Slot, StoreContent, StoreExt, StoreMore, Recording } from "./types-ext";
 import type { SessionContent } from "../content/course";
 import w01d1 from "../../content/week01/w01d1.json";
 import w01d2 from "../../content/week01/w01d2.json";
@@ -14,13 +14,14 @@ export function scheduleCard(cur: Flashcard | undefined, got: boolean) {
 }
 // Classmates see first name and last initial only.
 export const shortName = (full: string) => { const p = full.trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[p.length - 1][0]}.` : p[0]; };
-export type { Announcement, Attendance, CalendarDay, CapstoneRow, ContentRow, CourseSettings, Flashcard, FlashcardRow, Material, Message, MilestoneRow, MilestoneStatus, MockAttempt, NewPost, NotifyKind, NotifyLog, OHRequest, Portfolio, PortfolioItem, PostType, ReactionKey, ShowcaseComment, ShowcaseItem, Slot } from "./types-ext";
+export type { Announcement, Attendance, CalendarDay, CapstoneRow, ContentRow, CourseSettings, Flashcard, FlashcardRow, Material, Message, MilestoneRow, MilestoneStatus, MockAttempt, NewPost, NotifyKind, NotifyLog, OHRequest, Portfolio, PortfolioItem, PostType, Recording, ReactionKey, ShowcaseComment, ShowcaseItem, Slot } from "./types-ext";
 export const REACTIONS: { key: ReactionKey; emoji: string; label: string }[] = [{ key: "like", emoji: "👍", label: "Like" }, { key: "learned", emoji: "💡", label: "Learned something" }, { key: "fire", emoji: "🔥", label: "Impressive" }, { key: "question", emoji: "🤔", label: "Question" }, { key: "clap", emoji: "👏", label: "Applause" }];
 const noReactions = (): Record<ReactionKey, number> => ({ like: 0, learned: 0, fire: 0, question: 0, clap: 0 });
 
 export type Role = "student" | "instructor";
 export type Profile = { id: string; email: string; full_name: string; role: Role; created_at: string };
-export type Progress = { student_id: string; session_id: string; steps: boolean[]; goal: string | null; quiz_best: number | null; quiz_last: number | null; quiz_attempts: number; sandbox: Record<string, unknown> | null; responses: Record<string, unknown>; updated_at: string };
+export type Progress = { student_id: string; session_id: string; steps: boolean[]; goal: string | null; quiz_best: number | null; quiz_last: number | null; quiz_attempts: number; sandbox: Record<string, unknown> | null; responses: Record<string, unknown>; updated_at: string;
+  quiz_first?: (number | null)[] | null; quiz_picks?: (number | null)[] | null }; // option index picked per question: first try, most recent try
 export type Submission = { id: number; student_id: string; session_id: string; kind: "image" | "link" | "text"; body: string | null; file_path: string | null; created_at: string; url?: string };
 export type Grade = { student_id: string; session_id: string; score: number | null; feedback: string | null; graded_at: string; rubric?: string[] | null };
 export type Release = { session_id: string; student_id: string | null; unlocked_at: string };
@@ -84,7 +85,10 @@ class SupaStore implements Store {
   async myProgress() { const { data } = await this.sb.from("progress").select("*"); return (data || []) as Progress[]; }
   async saveProgress(p: Partial<Progress> & { session_id: string }) {
     const { data: { user } } = await this.sb.auth.getUser(); if (!user) return;
-    await this.sb.from("progress").upsert({ student_id: user.id, ...p, updated_at: new Date().toISOString() }, { onConflict: "student_id,session_id" });
+    const row = { student_id: user.id, ...p, updated_at: new Date().toISOString() };
+    const { error } = await this.sb.from("progress").upsert(row, { onConflict: "student_id,session_id" });
+    // Before the October 14 SQL runs, the per-question columns don't exist yet: save the score anyway.
+    if (error && /quiz_first|quiz_picks/.test(error.message)) { const { quiz_first: _f, quiz_picks: _p, ...rest } = row; void _f; void _p; await this.sb.from("progress").upsert(rest, { onConflict: "student_id,session_id" }); }
   }
   async mySubmissions() { const { data } = await this.sb.from("submissions").select("*").order("created_at"); return this.withUrls((data || []) as Submission[]); }
   async addSubmission(s: { session_id: string; kind: Submission["kind"]; body?: string; file?: Blob }) {
@@ -162,6 +166,12 @@ class SupaStore implements Store {
     if (m.file) { const ext = m.file.name.split(".").pop() || "bin"; file_path = `${m.session_id}/${m.kind}-${Date.now()}.${ext}`; const { error } = await this.sb.storage.from("materials").upload(file_path, m.file, { contentType: m.file.type || undefined }); if (error) throw error; }
     const { error } = await this.sb.from("session_materials").insert({ session_id: m.session_id, kind: m.kind, title: m.title, file_path, url: m.url ?? null }); if (error) throw error;
   }
+  async recordings() { const { data, error } = await this.sb.from("session_recordings").select("*").order("created_at"); if (error && !/session_recordings/.test(error.message)) throw error; return (data || []) as Recording[]; }
+  async addRecording(r: { session_id: string; title: string; url: string; passcode?: string; recorded_on?: string | null }) {
+    const { error } = await this.sb.from("session_recordings").insert({ session_id: r.session_id, title: r.title, url: r.url, passcode: r.passcode || null, recorded_on: r.recorded_on || null });
+    if (error) throw new Error(/session_recordings/.test(error.message) ? "The recordings table doesn't exist yet. Run supabase-run-once/schema-oct14-quiz-recordings.sql in the Supabase SQL editor." : error.message);
+  }
+  async deleteRecording(id: number) { const { error } = await this.sb.from("session_recordings").delete().eq("id", id); if (error) throw error; }
   async deleteMaterial(id: number) { const { data } = await this.sb.from("session_materials").select("file_path").eq("id", id).single(); if (data?.file_path) await this.sb.storage.from("materials").remove([data.file_path]); await this.sb.from("session_materials").delete().eq("id", id); }
   async attendance() { const { data } = await this.sb.from("attendance").select("student_id,session_id,status"); return (data || []) as Attendance[]; }
   async setAttendance(student_id: string, session_id: string, status: Attendance["status"] | null) { if (!status) await this.sb.from("attendance").delete().eq("student_id", student_id).eq("session_id", session_id); else await this.sb.from("attendance").upsert({ student_id, session_id, status, marked_at: new Date().toISOString() }, { onConflict: "student_id,session_id" }); }
@@ -280,8 +290,14 @@ function seedDemo() {
       const n = s.steps?.length || 0;
       const done = Math.round(n * Math.min(1, ability * (1.2 - k * 0.15) + (R() - 0.5) * 0.3));
       const steps = Array.from({ length: n }, (_, j) => j < Math.max(0, done));
-      const qb = R() < ability ? 4 + Math.round(R()) : 2 + Math.round(R() * 2);
-      progress.push({ student_id: uid, session_id: s.id, steps, goal: done > 0 ? "Compare three assistants on my job's weekly reporting task." : null, quiz_best: done > 0 ? qb : null, quiz_last: done > 0 ? qb : null, quiz_attempts: done > 0 ? 1 + Math.round(R()) : 0, sandbox: s.sandbox && done > 2 ? { train: 92, test: 71 } : null, responses: done > 1 ? { "1": "1. What does a data engineer do day to day?\n2. Which skills should I learn first?\n3. How is AI changing the role?" } : {}, updated_at: new Date(Date.now() - 86400000 * (daysAgo + k)).toISOString() });
+      // First-try picks: one question per session is a trap most people miss, and they miss it toward the same wrong option.
+      const quiz = s.quiz?.length ? s.quiz : ((({ w01d1, w01d2, w01d3 } as Record<string, { quiz?: { a: string[]; c: number }[] }>)[s.id]?.quiz) || []);
+      const trap = (k * 2 + 2) % Math.max(1, quiz.length);
+      const first = quiz.map((q, qi) => { const pRight = Math.min(0.95, ability * (qi === trap ? 0.45 : 1.05)); if (R() < pRight) return q.c; const wrong = q.a.map((_, j) => j).filter(j => j !== q.c); return R() < 0.7 ? wrong[0] : wrong[Math.floor(R() * wrong.length)]; });
+      const firstScore = first.filter((x, qi) => x === quiz[qi].c).length;
+      const attempts = done > 0 ? 1 + (firstScore < 4 && R() < 0.6 ? 1 : 0) : 0;
+      const qb = Math.min(quiz.length || 5, firstScore + (attempts > 1 ? 1 + Math.round(R()) : 0));
+      progress.push({ student_id: uid, session_id: s.id, steps, goal: done > 0 ? "Compare three assistants on my job's weekly reporting task." : null, quiz_best: done > 0 ? qb : null, quiz_last: done > 0 ? qb : null, quiz_attempts: attempts, quiz_first: done > 0 ? first : null, quiz_picks: done > 0 ? first : null, sandbox: s.sandbox && done > 2 ? { train: 92, test: 71 } : null, responses: done > 1 ? { "1": "1. What does a data engineer do day to day?\n2. Which skills should I learn first?\n3. How is AI changing the role?" } : {}, updated_at: new Date(Date.now() - 86400000 * (daysAgo + k)).toISOString() });
       if (done === n && n > 0) {
         submissions.push({ id: submissions.length + 1, student_id: uid, session_id: s.id, kind: k === 2 ? "link" : "text", body: k === 2 ? "https://docs.google.com/spreadsheets/d/example" : "The model learned the background, not the mug. Every mug photo was on the brown desk.", file_path: null, created_at: new Date(Date.now() - 86400000 * (daysAgo + k)).toISOString() });
         if (R() < 0.7) grades.push({ student_id: uid, session_id: s.id, score: Math.round(60 + ability * 40 - R() * 8), feedback: "Clear failure sentence. Add what data would fix it next time.", graded_at: new Date().toISOString() });
@@ -330,6 +346,7 @@ function seedDemo() {
     { id: 3, post_id: 105, author_id: "u-instr", body: "Great question for Week 2. If you only need 'guardrail missing yes or no', classification. If you need to point at where, object detection.", hidden: false, created_at: ago(25) },
   ];
   const showcaseMutes: string[] = [];
+  const recordings: Recording[] = [{ id: 1, session_id: "w01d1", title: "Class recording, Mon, Oct 12", url: "https://us06web.zoom.us/rec/share/example-w01d1", passcode: "Ai#2026x", recorded_on: "2026-10-12", created_at: new Date().toISOString() }];
   const capstones: CapstoneRow[] = [{ student_id: "u1", title: "Intake triage assistant for a physical therapy clinic", stakeholder: "Front desk manager, Riverbend PT", problem: "Staff spend about 6 hours a week sorting web inquiries by insurance, urgency, and location." }, { student_id: "u3", title: "Grant deadline tracker for a food bank", stakeholder: "Development director", problem: "Deadlines live in five inboxes and two were missed last year." }];
   const milestones: MilestoneRow[] = [{ student_id: "u1", milestone: "stakeholder", status: "approved", link: null, note: "Met with the front desk manager on Oct 2.", instructor_note: "Good fit. Real pain, measurable." }, { student_id: "u1", milestone: "proposal", status: "submitted", link: "https://docs.google.com/document/d/example", note: "Requirements and ROI case attached.", instructor_note: null }, { student_id: "u3", milestone: "stakeholder", status: "submitted", link: null, note: "Interview booked for next week.", instructor_note: null }];
   const portfolios: Portfolio[] = [{ student_id: "u1", slug: "dana-reyes", published: true, display_name: "Dana Reyes", headline: "Operations coordinator moving into AI automation", bio: "Ten years running front-office operations. I build small, measurable AI tools that take repetitive work off busy teams.", location: "Huntsville, AL", linkedin: "https://www.linkedin.com/", credly: null, email_public: null, capstone: { title: "Intake triage assistant for a physical therapy clinic", summary: "Sorts web inquiries by insurance, urgency, and location so the front desk starts each day with a ranked list." }, items: [{ title: "Three assistants, one question", blurb: "Compared ChatGPT, Claude, and Gemini on a real reporting task and marked every error." }, { title: "Breaking a classifier on purpose", blurb: "Trained an image model, then skewed its data to show how it learns shortcuts." }] }];
@@ -338,7 +355,7 @@ function seedDemo() {
   const content: ContentRow[] = [["w01d1", w01d1], ["w01d2", w01d2], ["w01d3", w01d3]].map(([id, c], i) => ({ session_id: id as string, content: c as unknown as SessionContent, version_note: "Built Oct 6, 2026", updated_at: new Date(Date.now() - 86400e3).toISOString(), verified_at: i === 0 ? new Date().toISOString() : i === 1 ? new Date(Date.now() - 86400e3 * 4).toISOString() : null, verification: i < 2 ? { checks: { tools: true, links: true, facts: true, quiz: true, guide: true }, note: "Free tiers confirmed on vendor pricing pages." } : null }));
   const materials: Material[] = [{ id: 1, session_id: "w01d1", kind: "student_guide", title: "Week 1 Day 1 Student Guide", file_path: null, url: "#", created_at: new Date().toISOString() }, { id: 2, session_id: "w01d1", kind: "slides", title: "Slides (Gamma)", file_path: null, url: "https://gamma.app", created_at: new Date().toISOString() }];
   const attendance: Attendance[] = [];
-  return { content, materials, attendance, settings, calendar, slots, oh, msgs, anns, flashcards, mocks, showcase, capstones, milestones, portfolios, notifyLog, notifyPrefs, reactions, comments, showcaseMutes, profiles, progress, grades, submissions, releases, roster: profiles.map(p => ({ email: p.email, full_name: p.full_name as string | null, role: p.role })) };
+  return { content, materials, attendance, settings, calendar, slots, oh, msgs, anns, flashcards, mocks, showcase, capstones, milestones, portfolios, notifyLog, notifyPrefs, reactions, comments, showcaseMutes, recordings, profiles, progress, grades, submissions, releases, roster: profiles.map(p => ({ email: p.email, full_name: p.full_name as string | null, role: p.role })) };
 }
 
 class DemoStore implements Store {
@@ -410,6 +427,9 @@ class DemoStore implements Store {
   async materials() { return this.d.materials; }
   async addMaterial(m: { session_id: string; kind: Material["kind"]; title: string; file?: File; url?: string }) { this.d.materials.push({ id: Date.now(), session_id: m.session_id, kind: m.kind, title: m.title, file_path: m.file ? "demo" : null, url: m.file ? URL.createObjectURL(m.file) : (m.url ?? null), created_at: new Date().toISOString() }); }
   async deleteMaterial(id: number) { this.d.materials = this.d.materials.filter(m => m.id !== id); }
+  async recordings() { const instr = this.d.profiles.find(p => p.id === this.me)?.role === "instructor"; return this.d.recordings.filter(r => instr || this.d.releases.some(x => x.session_id === r.session_id && (x.student_id === null || x.student_id === this.me))); }
+  async addRecording(r: { session_id: string; title: string; url: string; passcode?: string; recorded_on?: string | null }) { this.d.recordings.push({ id: Date.now(), session_id: r.session_id, title: r.title, url: r.url, passcode: r.passcode || null, recorded_on: r.recorded_on || null, created_at: new Date().toISOString() }); }
+  async deleteRecording(id: number) { this.d.recordings = this.d.recordings.filter(r => r.id !== id); }
   async attendance() { return this.d.attendance; }
   async setAttendance(student_id: string, session_id: string, status: Attendance["status"] | null) { this.d.attendance = this.d.attendance.filter(a => !(a.student_id === student_id && a.session_id === session_id)); if (status) this.d.attendance.push({ student_id, session_id, status }); }
   async signedUrl() { return ""; }

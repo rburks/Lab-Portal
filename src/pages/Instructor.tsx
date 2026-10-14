@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { SESSIONS, WEEKS, type Session } from "../content/course";
+import { SESSIONS, type Session } from "../content/course";
 import { useAuth } from "../auth";
 import { store, type Attendance, type ContentRow, type Grade, type Profile, type Progress, type Release, type Submission } from "../lib/store";
 import type { OHRequest } from "../lib/store";
@@ -50,8 +50,7 @@ function Dashboard({ d, reload }: { d: Data; reload: () => Promise<void> }) {
     <div className="stack" style={{ gap: 22 }}>
       <Overview d={d} />
       <div id="grid" style={{ scrollMarginTop: 90 }}>
-        <div className="row between" style={{ marginBottom: 10 }}><div><h2 style={{ fontSize: "1.2rem" }}>Progress by week</h2><p className="small muted">Click a cell to grade or review a student's work. Filters also drive the CSV export.</p></div></div>
-        <Grid d={d} reload={reload} />
+        <ClassProgress d={d} reload={reload} />
       </div>
     </div>
   );
@@ -133,72 +132,129 @@ function PersonRow({ s, right, rank }: { s: StudentStat; right: React.ReactNode;
 
 // ---------- Grid: grouped by week and day, filterable, with grading drawer ----------
 type Cell = { student: Profile; session: Session; p?: Progress; subs: Submission[]; g?: Grade; state: SessionState };
-function Grid({ d, reload }: { d: Data; reload: () => Promise<void> }) {
-  const params = new URLSearchParams(window.location.search);
-  const [q, setQ] = useState("");
-  const [week, setWeek] = useState<string>("open");
-  const [status, setStatus] = useState<string>(params.get("status") || "any");
-  const [quiz, setQuiz] = useState<string>("any");
-  const [flag, setFlag] = useState<string>("any");
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+// ---------- Class progress: what to reteach (per session, per question) and who needs a nudge (heatmap) ----------
+type QStat = { i: number; q: string; options: string[]; c: number; answered: number; right: number; pct: number; topWrong: { j: number; n: number } | null; missed: Profile[] };
+type SStat = { s: Session; n: number; labDone: number; labAvg: number; quizTakers: number; quizAvg: number | null; qs: QStat[]; hardest: QStat | null; review: number; noPicks: number };
+const pctColor = (v: number) => v >= 80 ? "var(--good)" : v >= 60 ? "var(--warn)" : "var(--bad)";
+const heat = (lab: number, quiz: number | null) => quiz == null ? lab : Math.round(lab * 0.6 + quiz * 0.4); // labs and quizzes only; grading stays out
+
+function ClassProgress({ d, reload }: { d: Data; reload: () => Promise<void> }) {
+  const [openS, setOpenS] = useState<string | null>(null);
   const [sel, setSel] = useState<Cell | null>(null);
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<"attention" | "name">("attention");
+  const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const students = useMemo(() => d.profiles.filter(p => p.role === "student"), [d.profiles]);
   const stats = useMemo(() => computeStats(d.profiles, d.progress, d.subs, d.grades, d.releases, d.attendance), [d]);
-  const students = d.profiles.filter(p => p.role === "student");
-  const openWeeks = WEEKS.filter(w => SESSIONS.some(s => s.week === w.n && d.releases.some(r => r.session_id === s.id)));
-  const weeks = week === "open" ? openWeeks : week === "all" ? WEEKS : WEEKS.filter(w => w.n === +week);
-  const cellOf = (st: Profile, s: Session): Cell => { const p = d.progress.find(x => x.student_id === st.id && x.session_id === s.id); const subs = d.subs.filter(x => x.student_id === st.id && x.session_id === s.id); const g = d.grades.find(x => x.student_id === st.id && x.session_id === s.id); return { student: st, session: s, p, subs, g, state: sessionState(s, p, subs, g, isUnlocked(s.id, st.id, d.releases)) }; };
-  const rows = students.filter(st => {
-    if (q && !st.full_name.toLowerCase().includes(q.toLowerCase()) && !st.email.toLowerCase().includes(q.toLowerCase())) return false;
-    const stat = stats.find(x => x.profile.id === st.id)!;
-    if (flag === "struggling" && !stat.flags.length) return false;
-    if (flag === "top" && stat.composite < 80) return false;
-    if (quiz !== "any") { const v = stat.quizAvg; if (quiz === "low" && !(v != null && v < 60)) return false; if (quiz === "high" && !(v != null && v >= 80)) return false; if (quiz === "none" && v != null) return false; }
-    if (status !== "any") { const cells = weeks.flatMap(w => SESSIONS.filter(s => s.week === w.n).map(s => cellOf(st, s))); if (!cells.some(c => c.state === status)) return false; }
-    return true;
-  });
+  const sessions = useMemo(() => SESSIONS.filter(s => s.built && d.releases.some(r => r.session_id === s.id)), [d.releases]);
+  const cellOf = useCallback((st: Profile, s: Session): Cell => { const p = d.progress.find(x => x.student_id === st.id && x.session_id === s.id); const subs = d.subs.filter(x => x.student_id === st.id && x.session_id === s.id); const g = d.grades.find(x => x.student_id === st.id && x.session_id === s.id); return { student: st, session: s, p, subs, g, state: sessionState(s, p, subs, g, isUnlocked(s.id, st.id, d.releases)) }; }, [d]);
+
+  const sstats: SStat[] = useMemo(() => sessions.map(s => {
+    const who = students.filter(st => isUnlocked(s.id, st.id, d.releases));
+    const ps = who.map(st => ({ st, p: d.progress.find(x => x.student_id === st.id && x.session_id === s.id) }));
+    const labs = ps.map(x => labPct(s, x.p));
+    const takers = ps.filter(x => x.p?.quiz_best != null);
+    const withPicks = ps.map(x => ({ st: x.st, picks: x.p?.quiz_first ?? x.p?.quiz_picks ?? null })).filter(x => Array.isArray(x.picks)) as { st: Profile; picks: (number | null)[] }[];
+    const qs: QStat[] = (s.quiz || []).map((qq, i) => {
+      const answered = withPicks.filter(x => x.picks[i] != null);
+      const right = answered.filter(x => x.picks[i] === qq.c);
+      const wrongCounts = new Map<number, number>(); answered.forEach(x => { const j = x.picks[i]!; if (j !== qq.c) wrongCounts.set(j, (wrongCounts.get(j) || 0) + 1); });
+      const top = [...wrongCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+      return { i, q: qq.q, options: qq.a, c: qq.c, answered: answered.length, right: right.length, pct: answered.length ? Math.round(100 * right.length / answered.length) : 0, topWrong: top ? { j: top[0], n: top[1] } : null, missed: answered.filter(x => x.picks[i] !== qq.c).map(x => x.st) };
+    });
+    const scored = qs.filter(x => x.answered > 0);
+    const hardest = scored.length ? [...scored].sort((a, b) => a.pct - b.pct)[0] : null;
+    return { s, n: who.length, labDone: labs.filter(v => v === 100).length, labAvg: labs.length ? Math.round(labs.reduce((a, b) => a + b, 0) / labs.length) : 0,
+      quizTakers: takers.length, quizAvg: takers.length ? Math.round(100 * takers.reduce((a, x) => a + (x.p!.quiz_best || 0), 0) / (takers.length * (s.quiz?.length || 5))) : null,
+      qs, hardest, review: who.filter(st => cellOf(st, s).state === "submitted").length, noPicks: takers.length - withPicks.length };
+  }), [sessions, students, d, cellOf]);
+
+  const rows = students.filter(st => !q || st.full_name.toLowerCase().includes(q.toLowerCase()) || st.email.toLowerCase().includes(q.toLowerCase()))
+    .map(st => { const stat = stats.find(x => x.profile.id === st.id)!; const cells = sessions.map(s => cellOf(st, s)); const open = cells.filter(c => c.state !== "locked");
+      const avg = open.length ? Math.round(open.reduce((a, c) => a + heat(labPct(c.session, c.p), c.p?.quiz_best != null ? 100 * c.p.quiz_best / (c.session.quiz?.length || 5) : null), 0) / open.length) : 0;
+      return { st, stat, cells, avg }; })
+    .filter(r => !onlyFlagged || r.stat.flags.length)
+    .sort((a, b) => sort === "name" ? a.st.full_name.localeCompare(b.st.full_name) : (b.stat.flags.length - a.stat.flags.length) || (a.avg - b.avg));
+  const flagged = stats.filter(x => x.flags.length).sort((a, b) => b.flags.length - a.flags.length);
+  const openLatest = (st: Profile) => { const s = [...sessions].reverse().find(x => isUnlocked(x.id, st.id, d.releases)); if (s) setSel(cellOf(st, s)); };
+
   const exportCSV = () => {
-    const sess = weeks.flatMap(w => SESSIONS.filter(s => s.week === w.n));
-    const head = ["Student", "Email", "Composite", "Lab avg %", "Quiz avg %", "Graded avg", ...sess.flatMap(s => [`${s.id} lab %`, `${s.id} quiz best`, `${s.id} submitted`, `${s.id} score`, `${s.id} feedback`])];
-    const body = rows.map(st => { const stat = stats.find(x => x.profile.id === st.id)!; return [st.full_name, st.email, stat.composite, stat.labAvg, stat.quizAvg ?? "", stat.gradeAvg ?? "", ...sess.flatMap(s => { const c = cellOf(st, s); return [labPct(s, c.p), c.p?.quiz_best ?? "", c.subs.length, c.g?.score ?? "", c.g?.feedback ?? ""]; })]; });
-    download(`lab-portal-grades-${new Date().toISOString().slice(0, 10)}.csv`, toCSV([head, ...body]));
+    const head = ["Student", "Email", "Composite", "Lab avg %", "Quiz avg %", "Graded avg", "Flags", ...sessions.flatMap(s => [`${s.id} lab %`, `${s.id} quiz best`, `${s.id} submitted`, `${s.id} score`, `${s.id} feedback`])];
+    const body = rows.map(({ st, stat }) => [st.full_name, st.email, stat.composite, stat.labAvg, stat.quizAvg ?? "", stat.gradeAvg ?? "", stat.flags.join("; "), ...sessions.flatMap(s => { const c = cellOf(st, s); return [labPct(s, c.p), c.p?.quiz_best ?? "", c.subs.length, c.g?.score ?? "", c.g?.feedback ?? ""]; })]);
+    download(`class-progress-${new Date().toISOString().slice(0, 10)}.csv`, toCSV([head, ...body]));
   };
+
   return (
-    <div className="stack" style={{ gap: 14 }}>
-      <div className="card"><div className="filters">
-        <label>Search<input id="f-q" placeholder="Name or email" value={q} onChange={e => setQ(e.target.value)} /></label>
-        <label>Weeks<select id="f-week" value={week} onChange={e => setWeek(e.target.value)}><option value="open">Open weeks</option><option value="all">All 20 weeks</option>{WEEKS.map(w => <option key={w.n} value={w.n}>Week {w.n}</option>)}</select></label>
-        <label>Status<select id="f-status" value={status} onChange={e => setStatus(e.target.value)}><option value="any">Any</option>{(Object.keys(STATE_LABEL) as SessionState[]).map(k => <option key={k} value={k}>{STATE_LABEL[k]}</option>)}</select></label>
-        <label>Quiz average<select id="f-quiz" value={quiz} onChange={e => setQuiz(e.target.value)}><option value="any">Any</option><option value="low">Below 60%</option><option value="high">80% and up</option><option value="none">No quizzes yet</option></select></label>
-        <label>Performance<select id="f-flag" value={flag} onChange={e => setFlag(e.target.value)}><option value="any">Everyone</option><option value="top">Top (80+)</option><option value="struggling">Flagged</option></select></label>
-        <label>&nbsp;<button className="btn ghost" onClick={exportCSV}>Export CSV</button></label>
-      </div></div>
-      <div className="card" style={{ padding: 0 }}><div className="grid-wrap" style={{ maxHeight: "70vh" }}>
-        <table className="grid">
-          <thead>
-            <tr><th className="sticky" rowSpan={2}>Student</th><th rowSpan={2}>Composite</th>
-              {weeks.map(w => <th key={w.n} className="grp" colSpan={collapsed.has(w.n) ? 1 : 3}><button className="btn ghost xs" onClick={() => setCollapsed(c => { const n = new Set(c); n.has(w.n) ? n.delete(w.n) : n.add(w.n); return n; })} title={w.theme}>{collapsed.has(w.n) ? "▸" : "▾"} Week {w.n}</button></th>)}</tr>
-            <tr>{weeks.map(w => collapsed.has(w.n) ? <th key={w.n} className="day-cell">Avg</th> : [1, 2, 3].map(dn => <th key={`${w.n}-${dn}`} className={dn === 1 ? "day-cell" : ""} title={SESSIONS.find(s => s.week === w.n && s.day === dn)?.title}>Day {dn}</th>))}</tr>
-          </thead>
-          <tbody>
-            {rows.map(st => { const stat = stats.find(x => x.profile.id === st.id)!; return (
-              <tr key={st.id}>
-                <td className="sticky"><div className="row" style={{ gap: 8 }}><span className="avatar" style={{ width: 26, height: 26, fontSize: ".7rem" }}>{initials(st.full_name)}</span><div><b>{st.full_name}</b>{stat.flags.length > 0 && <span className="pill bad" style={{ marginLeft: 6 }}>{stat.flags.length}</span>}<div className="small muted">Last active {fmtDate(stat.lastActive)}</div></div></div></td>
-                <td><b className="mono">{stat.composite}</b></td>
-                {weeks.map(w => collapsed.has(w.n)
-                  ? <td key={w.n} className="day-cell mono">{Math.round(SESSIONS.filter(s => s.week === w.n).reduce((a, s) => a + labPct(s, cellOf(st, s).p), 0) / 3)}%</td>
-                  : SESSIONS.filter(s => s.week === w.n).map((s, i) => { const c = cellOf(st, s); return (
-                    <td key={s.id} className={i === 0 ? "day-cell" : ""}>
-                      <button className={`cell ${c.state === "locked" ? "locked" : c.state === "submitted" ? "submitted" : c.state === "graded" ? "graded" : c.state === "in_progress" || c.state === "complete" ? "inprog" : ""}`} onClick={() => setSel(c)} title={`${s.title}\n${STATE_LABEL[c.state]}`}>
-                        {c.state === "locked" ? "🔒" : c.state === "graded" ? `${c.g!.score}` : c.state === "submitted" ? "Review" : c.state === "not_started" ? "·" : `${labPct(s, c.p)}%`}
-                        {c.p?.quiz_best != null && c.state !== "locked" && <span className="muted" style={{ fontWeight: 500 }}>q{c.p.quiz_best}</span>}
+    <div className="stack" style={{ gap: 18 }}>
+      <div>
+        <div className="row between" style={{ marginBottom: 10 }}><div><h2 style={{ fontSize: "1.2rem" }}>Sessions: what to reteach</h2><p className="small muted">One row per open session. Click a row to see every quiz question, the wrong answer the class picked most, and who missed it.</p></div></div>
+        <div className="card" style={{ padding: 0 }}>
+          {!sstats.length && <div className="empty">No sessions are open yet. Unlock one on the Sessions page.</div>}
+          {sstats.map(x => { const isOpen = openS === x.s.id; return (
+            <div key={x.s.id} className={`sess-row ${isOpen ? "open" : ""}`}>
+              <button className="sess-head" onClick={() => setOpenS(isOpen ? null : x.s.id)} aria-expanded={isOpen}>
+                <span className="caret">{isOpen ? "▾" : "▸"}</span>
+                <span className="sess-title"><span className="eyebrow">W{x.s.week} D{x.s.day}</span><b title={x.s.title}>{x.s.title}</b></span>
+                <span className="sess-metric"><span className="eyebrow">Lab finished</span><span><b>{x.labDone}</b>/{x.n}</span><span className="bar"><i style={{ width: `${x.n ? 100 * x.labDone / x.n : 0}%` }} /></span></span>
+                <span className="sess-metric"><span className="eyebrow">Avg quiz</span>{x.quizAvg == null ? <span className="muted">No attempts</span> : <span><b style={{ color: pctColor(x.quizAvg) }}>{x.quizAvg}%</b> <span className="muted small">{x.quizTakers} took it</span></span>}</span>
+                <span className="sess-hard"><span className="eyebrow">Hardest question</span>{x.hardest ? <span><b style={{ color: pctColor(x.hardest.pct) }}>Q{x.hardest.i + 1} · {x.hardest.pct}% right</b> <span className="muted small">{x.hardest.q}</span></span> : <span className="muted small">Not enough answers yet</span>}</span>
+                {x.review > 0 && <span className="pill warn" title="Submitted, waiting for a grade">{x.review} to grade</span>}
+              </button>
+              {isOpen && <div className="qbreak">
+                {x.qs.map(qs => (
+                  <div key={qs.i} className={`qrow ${qs.answered && qs.pct < 60 ? "bad" : qs.answered && qs.pct < 80 ? "mid" : ""}`}>
+                    <div className="qnum">Q{qs.i + 1}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="qtext">{qs.q}</div>
+                      <div className="small muted">Answer: {qs.options[qs.c]}</div>
+                      {qs.topWrong && <div className="small" style={{ color: "var(--bad)" }}>Most common wrong pick: "{qs.options[qs.topWrong.j]}" ({qs.topWrong.n} student{qs.topWrong.n === 1 ? "" : "s"})</div>}
+                      {qs.missed.length > 0 && <div className="row" style={{ gap: 4, marginTop: 6 }}><span className="small muted">Missed it:</span>{qs.missed.map(st => <button key={st.id} className="chip-btn" onClick={() => setSel(cellOf(st, x.s))} title="Open their work">{st.full_name}</button>)}</div>}
+                    </div>
+                    <div className="qpct">{qs.answered ? <><b style={{ color: pctColor(qs.pct) }}>{qs.pct}%</b><span className="small muted">{qs.right}/{qs.answered} right</span><span className="bar"><i style={{ width: `${qs.pct}%`, background: pctColor(qs.pct) }} /></span></> : <span className="small muted">No answers</span>}</div>
+                  </div>))}
+                <p className="small muted" style={{ margin: 0 }}>Based on each student's first try, so retakes don't hide what was confusing.{x.noPicks > 0 ? ` ${x.noPicks} student${x.noPicks === 1 ? "" : "s"} took this quiz before per-question tracking started and aren't counted here.` : ""}</p>
+              </div>}
+            </div>); })}
+        </div>
+      </div>
+
+      <div>
+        <div className="row between" style={{ marginBottom: 10 }}><div><h2 style={{ fontSize: "1.2rem" }}>Students</h2><p className="small muted">Color comes from labs and quizzes only (grading stays out). Click any cell to review or grade.</p></div></div>
+        {flagged.length > 0 && <div className="card attention">
+          <div className="row between"><b>Needs attention ({flagged.length})</b><button className="btn ghost xs" onClick={() => setOnlyFlagged(f => !f)}>{onlyFlagged ? "Show everyone" : "Show only these"}</button></div>
+          <div className="stack" style={{ gap: 6, marginTop: 8 }}>{flagged.slice(0, 6).map(f => <div key={f.profile.id} className="row" style={{ gap: 8 }}>
+            <button className="linkish" onClick={() => openLatest(f.profile)}><b>{f.profile.full_name}</b></button>{f.flags.map(fl => <span key={fl} className="pill bad">{fl}</span>)}</div>)}
+            {flagged.length > 6 && <span className="small muted">and {flagged.length - 6} more below</span>}</div>
+        </div>}
+        <div className="card" style={{ marginTop: 10 }}><div className="filters">
+          <label>Search<input id="f-q" placeholder="Name or email" value={q} onChange={e => setQ(e.target.value)} /></label>
+          <label>Sort<select id="f-sort" value={sort} onChange={e => setSort(e.target.value as "attention" | "name")}><option value="attention">Needs attention first</option><option value="name">Name</option></select></label>
+          <label>&nbsp;<button className="btn ghost" onClick={exportCSV}>Export CSV</button></label>
+        </div></div>
+        <div className="card" style={{ padding: 0, marginTop: 10 }}><div className="grid-wrap" style={{ maxHeight: "70vh" }}>
+          <table className="grid heatmap">
+            <thead><tr><th className="sticky">Student</th>{sessions.map(s => <th key={s.id} className="day-cell" title={s.title}>W{s.week} D{s.day}</th>)}</tr></thead>
+            <tbody>
+              {rows.map(({ st, stat, cells }) => (
+                <tr key={st.id}>
+                  <td className="sticky"><div className="row" style={{ gap: 8 }}><span className="avatar" style={{ width: 26, height: 26, fontSize: ".7rem" }}>{initials(st.full_name)}</span><div><b>{st.full_name}</b>{stat.flags.length > 0 && <span className="pill bad" style={{ marginLeft: 6 }} title={stat.flags.join("\n")}>{stat.flags.length}</span>}<div className="small muted">Last active {fmtDate(stat.lastActive)}</div></div></div></td>
+                  {cells.map(c => { const lab = labPct(c.session, c.p); const qz = c.p?.quiz_best != null ? Math.round(100 * c.p.quiz_best / (c.session.quiz?.length || 5)) : null; const h = heat(lab, qz);
+                    const cls = c.state === "locked" ? "locked" : c.state === "not_started" ? "none" : h >= 80 ? "good" : h >= 50 ? "mid" : "low";
+                    return (
+                    <td key={c.session.id} className="day-cell">
+                      <button className={`hcell ${cls}`} onClick={() => setSel(c)} title={`${c.session.title}\n${STATE_LABEL[c.state]} · lab ${lab}%${qz != null ? ` · quiz ${c.p!.quiz_best}/${c.session.quiz?.length || 5}` : " · no quiz yet"}${c.g?.score != null ? ` · graded ${c.g.score}` : ""}`}>
+                        {c.state === "locked" ? "🔒" : c.state === "not_started" ? "·" : <><span>{lab}%</span>{qz != null && <span className="hq">q{c.p!.quiz_best}</span>}</>}
+                        {c.state === "submitted" && <span className="dot" aria-label="needs grading" />}
+                        {c.state === "graded" && <span className="g">✓</span>}
                       </button>
-                    </td>); }))}
-              </tr>); })}
-            {!rows.length && <tr><td colSpan={99} className="empty">No students match these filters.</td></tr>}
-          </tbody>
-        </table>
-      </div></div>
-      <div className="row small muted"><span className="cell locked">🔒</span> locked <span className="cell">·</span> not started <span className="cell inprog">40%</span> lab progress, q = quiz best <span className="cell submitted">Review</span> submitted, needs grading <span className="cell graded">88</span> graded</div>
+                    </td>); })}
+                </tr>))}
+              {!rows.length && <tr><td colSpan={99} className="empty">No students match.</td></tr>}
+            </tbody>
+          </table>
+        </div></div>
+        <div className="row small muted" style={{ marginTop: 8, gap: 10 }}><span className="hcell good">85%</span> on track <span className="hcell mid">60%</span> partway <span className="hcell low">20%</span> behind <span className="hcell none">·</span> not started <span className="hcell locked">🔒</span> locked <span>q = best quiz score</span> <span className="row" style={{ gap: 4 }}><span className="dot" style={{ position: "static" }} /> needs grading</span> <span>✓ graded</span></div>
+      </div>
       {sel && <GradeDrawer cell={sel} onClose={() => setSel(null)} onSaved={async () => { await reload(); setSel(null); }} />}
     </div>
   );

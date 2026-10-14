@@ -35,6 +35,7 @@ export interface StoreExt {
 
 import type { SessionContent } from "../content/course";
 export type ContentRow = { session_id: string; content: SessionContent; version_note: string | null; updated_at: string; verified_at: string | null; verification: { checks: Record<string, boolean>; note: string } | null };
+export type Recording = { id: number; session_id: string; title: string; url: string; passcode: string | null; recorded_on: string | null; created_at: string };
 export type Material = { id: number; session_id: string; kind: "student_guide" | "slides" | "lab_deck" | "other"; title: string; file_path: string | null; url: string | null; created_at: string };
 export type Attendance = { student_id: string; session_id: string; status: "present" | "late" | "absent" };
 export interface StoreContent {
@@ -43,6 +44,9 @@ export interface StoreContent {
   materials(): Promise<Material[]>;
   addMaterial(m: { session_id: string; kind: Material["kind"]; title: string; file?: File; url?: string }): Promise<void>;
   deleteMaterial(id: number): Promise<void>;
+  recordings(): Promise<Recording[]>;
+  addRecording(r: { session_id: string; title: string; url: string; passcode?: string; recorded_on?: string | null }): Promise<void>;
+  deleteRecording(id: number): Promise<void>;
   attendance(): Promise<Attendance[]>;
   setAttendance(student_id: string, session_id: string, status: Attendance["status"] | null): Promise<void>;
 }

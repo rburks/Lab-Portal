@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SESSIONS, WEEKS, diffContent, validateContent, type SessionContent } from "../content/course";
 import { useAuth } from "../auth";
-import { store, type Attendance, type ContentRow, type Material, type Profile, type Release } from "../lib/store";
+import { store, type Attendance, type ContentRow, type Material, type Profile, type Recording, type Release } from "../lib/store";
 import { buildSchedule, fmtLong, iso } from "../lib/schedule";
 import { download, fmtDate, initials, toCSV } from "../lib/logic";
 
@@ -23,6 +23,9 @@ export function ContentPage() {
   const [sel, setSel] = useState<string>("w01d1");
   const reload = useCallback(async () => { const [c, m, r, p] = await Promise.all([store.allContent(), store.materials(), store.releases(), store.allProfiles()]); setRows(c); setMats(m); setReleases(r); setStudents(p.filter(x => x.role === "student")); }, []);
   useEffect(() => { reload(); }, [reload]);
+  const [dates, setDates] = useState<Record<string, string>>({});
+  useEffect(() => { Promise.all([store.settings(), store.calendarDays()]).then(([st, days]) => setDates(Object.fromEntries(buildSchedule(st, days).filter(x => x.session).map(x => [x.session!.id, x.date])))).catch(() => {}); }, []);
+  const schedDate = (id: string) => dates[id];
   const row = rows.find(r => r.session_id === sel);
   const s = SESSIONS.find(x => x.id === sel)!;
   const status = (r?: ContentRow) => { if (!r) return { cls: "", label: "No content" }; if (!r.content.verified) return { cls: "bad", label: "No verification stamp" }; const d = Math.floor((Date.now() - new Date(r.content.verified.date + "T12:00:00Z").getTime()) / 86400000); return d <= 7 ? { cls: "good", label: `Checked ${r.content.verified.date}` } : { cls: "warn", label: `Checked ${r.content.verified.date} (${d}d ago)` }; };
@@ -54,6 +57,7 @@ export function ContentPage() {
           <Importer sel={sel} current={row?.content} onDone={async () => { await reload(); await reloadContent(); }} toast={toast} />
           {row && <Verify row={row} />}
           <Materials sel={sel} mats={mats.filter(m => m.session_id === sel)} onDone={reload} toast={toast} />
+          <Recordings sel={sel} date={schedDate(sel)} toast={toast} />
         </section>
       </div>
     </div>
@@ -127,6 +131,35 @@ function Verify({ row }: { row: ContentRow }) {
         {v.sources && v.sources.length > 0 && <div className="row small muted" style={{ gap: 6 }}><span>Checked against:</span>{v.sources.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer" className="pill" style={{ textDecoration: "none" }}>{new URL(u).hostname.replace(/^www\./, "")} ↗</a>)}</div>}
       </>}
       <div className="row small muted" style={{ gap: 6 }}><span>Tools in this session:</span>{(row.content.tools || []).map(t => <a key={t.name} href={t.url} target="_blank" rel="noreferrer" className="pill acc" style={{ textDecoration: "none" }}>{t.name} ↗</a>)}</div>
+    </div>
+  );
+}
+
+// Class recordings: paste the Zoom share link (and passcode). Zoom keeps hosting the video; nothing is uploaded here.
+function Recordings({ sel, date, toast }: { sel: string; date?: string; toast: (m: string) => void }) {
+  const [list, setList] = useState<Recording[]>([]);
+  const [url, setUrl] = useState(""); const [pass, setPass] = useState(""); const [day, setDay] = useState(date || iso(new Date())); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => { try { setList((await store.recordings()).filter(r => r.session_id === sel)); } catch (e) { setErr(describe(e)); } }, [sel]);
+  useEffect(() => { load(); setDay(date || iso(new Date())); setUrl(""); setPass(""); setErr(""); }, [load, date]);
+  const ok = /^https?:\/\/\S+\.\S+/.test(url.trim());
+  const add = async () => {
+    setBusy(true); setErr("");
+    const label = new Date(day + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    try { await store.addRecording({ session_id: sel, title: `Class recording, ${label}`, url: url.trim(), passcode: pass.trim(), recorded_on: day }); setUrl(""); setPass(""); await load(); toast("Recording posted. Students see it once this session is unlocked for them."); }
+    catch (e) { setErr(describe(e)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="card stack">
+      <h3>Class recording</h3>
+      <p className="small muted">In Zoom, open the cloud recording, click Share, and copy the link. Paste it here with the passcode if it has one. Students see it on this session (and a 🎥 on the course page) once the session is unlocked for them. No video is uploaded to the portal.</p>
+      <div className="row" style={{ alignItems: "flex-end" }}>
+        <label className="stack" style={{ gap: 4, flex: 3, minWidth: 240 }}><span className="eyebrow">Zoom share link</span><input id="rec-url" type="url" placeholder="https://us06web.zoom.us/rec/share/…" value={url} onChange={e => setUrl(e.target.value)} style={url && !ok ? { borderColor: "var(--bad)" } : undefined} /></label>
+        <label className="stack" style={{ gap: 4, flex: 1, minWidth: 120 }}><span className="eyebrow">Passcode (optional)</span><input id="rec-pass" value={pass} onChange={e => setPass(e.target.value)} autoComplete="off" /></label>
+        <label className="stack" style={{ gap: 4, width: "auto" }}><span className="eyebrow">Class date</span><input type="date" value={day} onChange={e => setDay(e.target.value)} /></label>
+        <button className="btn" disabled={busy || !ok} onClick={add}>{busy ? "Posting…" : "Post recording"}</button>
+      </div>
+      {err && <div className="tip-box small">{err}</div>}
+      <div className="stack" style={{ gap: 6 }}>{list.map(r => <div key={r.id} className="row between" style={{ padding: "6px 0", borderBottom: "1px solid var(--line)" }}><span className="small">🎥 <a href={r.url} target="_blank" rel="noreferrer">{r.title}</a>{r.passcode && <span className="muted"> · passcode <code>{r.passcode}</code></span>}</span><button className="btn ghost xs" onClick={async () => { await store.deleteRecording(r.id); await load(); toast("Recording removed"); }}>Remove</button></div>)}{!list.length && <div className="small muted">No recording posted yet.</div>}</div>
     </div>
   );
 }
