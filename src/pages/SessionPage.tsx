@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { byId, type Session } from "../content/course";
 import { useAuth } from "../auth";
 import { useStudentData } from "./useStudentData";
-import { store, type Material, type Progress, type Submission } from "../lib/store";
+import { store, type Material, type Progress, type Recording, type Submission } from "../lib/store";
 import { useEffect } from "react";
 import { compressImage, isUnlocked } from "../lib/logic";
 import Sandbox from "../components/Sandbox";
@@ -20,6 +20,8 @@ export default function SessionPage() {
   const [tab, setTab] = useState<Tab>("lab");
   const [mats, setMats] = useState<Material[]>([]);
   useEffect(() => { store.materials().then(m => setMats(m.filter(x => x.session_id === id))); }, [id]);
+  const [recs, setRecs] = useState<Recording[]>([]);
+  useEffect(() => { store.recordings().then(r => setRecs(r.filter(x => x.session_id === id))).catch(() => setRecs([])); }, [id]);
   if (!s) return <Navigate to="/" />;
   if (data.loading) return <div className="empty">Loading…</div>;
   if (!isUnlocked(s.id, user!.id, data.releases)) return <div className="card empty">This session is locked. Your instructor will open it when the class gets there.<br /><Link to="/">Back to course</Link></div>;
@@ -43,6 +45,7 @@ export default function SessionPage() {
         {grade?.score != null && <div className="card" style={{ padding: "10px 14px", maxWidth: 380 }}><span className="eyebrow">Graded</span><div className="bignum">{grade.score}</div>{grade.feedback && <p className="small" style={{ margin: "4px 0 0" }}>{grade.feedback}</p>}
           {s.rubric && grade.rubric && <div className="stack small" style={{ gap: 3, marginTop: 8 }}>{s.rubric.items.map(it => { const ok = grade.rubric!.includes(it.id); return <div key={it.id} className="row" style={{ gap: 6, alignItems: "flex-start", flexWrap: "nowrap" }}><span style={{ color: ok ? "var(--good)" : "var(--mute)" }}>{ok ? "✓" : "○"}</span><span className={ok ? "" : "muted"}>{it.label} <span className="mono muted">· {it.points}</span></span></div>; })}</div>}</div>}
       </div>
+      {recs.length > 0 && <RecordingBar recs={recs} toast={toast} />}
       {(s.tools?.length || mats.length > 0) && <div className="row" style={{ gap: 8 }}>
         {mats.filter(m => m.kind === "student_guide").map(m => <a key={m.id} className="btn sm" href={m.url || "#"} target="_blank" rel="noreferrer">📄 Download student guide</a>)}
         {mats.filter(m => m.kind !== "student_guide").map(m => <a key={m.id} className="btn ghost sm" href={m.url || "#"} target="_blank" rel="noreferrer">{m.title} ↗</a>)}
@@ -56,7 +59,7 @@ export default function SessionPage() {
           {tab === "lens" && <Lens s={s} />}
           {tab === "quiz" && <Quiz s={s} p={p} save={save} toast={toast} />}
           {tab === "submit" && <Submit s={s} subs={subs} reload={data.reload} toast={toast} />}
-          {tab === "resources" && <Resources s={s} mats={mats} />}
+          {tab === "resources" && <Resources s={s} mats={mats} recs={recs} toast={toast} />}
         </div>
       </div>
     </div>
@@ -79,7 +82,8 @@ function Quiz({ s, p, save, toast }: { s: Session; p?: Progress; save: (x: Parti
     if (picks.some(x => x === null)) return toast("Answer every question first");
     const sc = picks.filter((x, i) => x === s.quiz![i].c).length;
     setResult(sc);
-    await save({ quiz_last: sc, quiz_best: Math.max(sc, p?.quiz_best ?? 0), quiz_attempts: (p?.quiz_attempts ?? 0) + 1 });
+    // Keep each pick so the instructor can see which questions (and which wrong options) trip the class up.
+    await save({ quiz_last: sc, quiz_best: Math.max(sc, p?.quiz_best ?? 0), quiz_attempts: (p?.quiz_attempts ?? 0) + 1, quiz_picks: picks, quiz_first: p?.quiz_first ?? picks });
   };
   return (
     <div className="reading stack">
@@ -148,9 +152,23 @@ function Submit({ s, subs, reload, toast }: { s: Session; subs: Submission[]; re
   );
 }
 
-function Resources({ s, mats }: { s: Session; mats: Material[] }) {
+// Class recording: opens the Zoom share link in a new tab and shows the passcode with a copy button.
+function RecordingBar({ recs, toast }: { recs: Recording[]; toast: (m: string) => void }) {
+  return (
+    <div className="stack" style={{ gap: 6 }}>{recs.map(r => (
+      <div key={r.id} className="rec">
+        <a className="btn sm" href={r.url} target="_blank" rel="noreferrer">🎥 Watch {recs.length > 1 ? r.title.replace(/^Class recording, /, "recording, ") : "the class recording"}</a>
+        {r.passcode && <span className="passcode">Passcode <code>{r.passcode}</code><button className="btn ghost xs" onClick={async () => { try { await navigator.clipboard.writeText(r.passcode!); toast("Passcode copied"); } catch { toast(`Passcode: ${r.passcode}`); } }}>Copy</button></span>}
+        <span className="small muted">Opens in Zoom{r.passcode ? ". Paste the passcode when it asks." : "."}</span>
+      </div>))}
+    </div>
+  );
+}
+
+function Resources({ s, mats, recs, toast }: { s: Session; mats: Material[]; recs: Recording[]; toast: (m: string) => void }) {
   return (
     <div className="reading stack" style={{ gap: 18 }}>
+      {recs.length > 0 && <div><span className="eyebrow">Class recording</span><div style={{ marginTop: 8 }}><RecordingBar recs={recs} toast={toast} /></div></div>}
       <div><span className="eyebrow">Materials</span>
         <div className="stack" style={{ gap: 8, marginTop: 8 }}>{mats.map(m => <a key={m.id} className="sub" href={m.url || "#"} target="_blank" rel="noreferrer" style={{ textDecoration: "none", color: "inherit" }}><div><b>{m.title}</b><div className="small muted">{m.kind === "student_guide" ? "Download and keep. Everything from today in one document." : m.kind === "slides" ? "Today's slides" : m.kind === "lab_deck" ? "The lab deck" : "Resource"}</div></div><span className="pill acc">{m.file_path ? "Download" : "Open"}</span></a>)}{!mats.length && <div className="small muted">Materials for this session will appear here before class.</div>}</div></div>
       <div><span className="eyebrow">Tools used today</span>
