@@ -238,6 +238,45 @@ table.grid td.day-cell { border-left: 1px solid var(--line); }
 .showcase-link { display: block; padding: 22px 14px; border: 1px dashed var(--line); border-radius: var(--r-sm); text-align: center; font-weight: 600; text-decoration: none; background: var(--panel-2); }
 .showcase-quote { margin: 0; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--panel-2); border-radius: 0 var(--r-sm) var(--r-sm) 0; white-space: pre-wrap; font-size: .92rem; }
 
+/* dashboard: class progress */
+.sess-row { border-bottom: 1px solid var(--line); }
+.sess-row:last-child { border-bottom: 0; }
+.sess-row.open { background: var(--panel-2); }
+.sess-head { width: 100%; display: grid; grid-template-columns: 18px minmax(180px, 1.4fr) minmax(110px, .7fr) minmax(110px, .7fr) minmax(200px, 2fr) 92px; gap: 14px; align-items: center; padding: 12px 16px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.sess-head:hover { background: var(--panel-2); }
+.sess-head .caret { color: var(--mute); }
+.sess-title, .sess-metric, .sess-hard { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sess-title b, .sess-hard > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { display: block; height: 5px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 3px; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.qbreak { display: flex; flex-direction: column; gap: 8px; padding: 4px 16px 16px 48px; }
+.qrow { display: grid; grid-template-columns: 34px minmax(0, 1fr) 130px; gap: 12px; align-items: start; padding: 10px 12px; border-radius: var(--r-sm); background: var(--panel); border: 1px solid var(--line); }
+.qrow.bad { border-color: var(--bad); background: var(--bad-soft); }
+.qrow.mid { border-color: var(--warn); }
+.qnum { font-family: var(--mono); font-weight: 600; color: var(--mute); }
+.qtext { font-weight: 600; margin-bottom: 2px; }
+.qpct { display: flex; flex-direction: column; gap: 2px; text-align: right; }
+.qpct .bar { margin-left: auto; width: 100%; }
+.chip-btn { padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; font-size: .78rem; cursor: pointer; }
+.chip-btn:hover { border-color: var(--accent); color: var(--accent); }
+.attention { border-color: var(--bad); }
+.hcell { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 64px; padding: 4px 8px; border-radius: var(--r-sm); font-size: .76rem; font-weight: 600; border: 1px solid transparent; background: var(--panel-2); color: var(--ink-2); cursor: pointer; font-family: inherit; }
+.hcell:hover { border-color: var(--accent); }
+.hcell.good { background: var(--good-soft); color: var(--good); }
+.hcell.mid { background: var(--warn-soft); color: var(--warn); }
+.hcell.low { background: var(--bad-soft); color: var(--bad); }
+.hcell.none { color: var(--mute); }
+.hcell.locked { color: var(--lock); background: transparent; }
+.hcell .hq { font-weight: 500; opacity: .8; }
+.hcell .g { font-size: .7rem; }
+.dot { position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); border: 2px solid var(--panel); display: inline-block; }
+@media (max-width: 900px) { .sess-head { grid-template-columns: 18px minmax(0, 1fr) auto; } .sess-head .sess-metric, .sess-head .sess-hard { grid-column: 2 / -1; } .qbreak { padding-left: 16px; } .qrow { grid-template-columns: 30px minmax(0, 1fr); } .qpct { grid-column: 2; text-align: left; } }
+
+/* recordings */
+.rec { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.passcode { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; border: 1px dashed var(--line); font-size: .8rem; }
+.passcode code { font-family: var(--mono); }
+
 /* showcase feed */
 .feed { display: flex; flex-direction: column; gap: 12px; max-width: 760px; }
 .feed-start .avatar, .post .avatar { flex-shrink: 0; }
