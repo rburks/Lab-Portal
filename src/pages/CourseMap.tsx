@@ -4,7 +4,7 @@ import { useAuth } from "../auth";
 import { useStudentData } from "./useStudentData";
 import { isUnlocked, labPct, sessionState, STATE_LABEL } from "../lib/logic";
 import { useEffect, useState } from "react";
-import { store, type Announcement } from "../lib/store";
+import { store, type Announcement, type Recording } from "../lib/store";
 import { Announcements } from "./MessagesPage";
 
 export default function CourseMap() {
@@ -12,6 +12,8 @@ export default function CourseMap() {
   const { progress, subs, grades, releases, loading } = useStudentData();
   const [anns, setAnns] = useState<Announcement[]>([]);
   useEffect(() => { store.announcements().then(setAnns); }, []);
+  const [recs, setRecs] = useState<Recording[]>([]);
+  useEffect(() => { store.recordings().then(setRecs).catch(() => setRecs([])); }, []);
   if (loading) return <div className="empty">Loading your course…</div>;
   const open = SESSIONS.filter(s => isUnlocked(s.id, user!.id, releases));
   const next = open.find(s => { const p = progress.find(x => x.session_id === s.id); return sessionState(s, p, subs.filter(x => x.session_id === s.id), grades.find(g => g.session_id === s.id), true) !== "graded"; });
@@ -39,7 +41,7 @@ export default function CourseMap() {
                       const unlocked = isUnlocked(d.id, user!.id, releases);
                       const st = sessionState(d, progress.find(p => p.session_id === d.id), subs.filter(x => x.session_id === d.id), grades.find(g => g.session_id === d.id), unlocked);
                       const cls = `day ${!unlocked ? "locked" : st === "graded" || st === "complete" || st === "submitted" ? "done" : st === "in_progress" ? "open" : ""}`;
-                      const inner = <><span className="ic">{st === "graded" || st === "complete" || st === "submitted" ? "✓" : d.day}</span><span><span className="t" title={d.title}>{d.title}</span><span className="s">{unlocked ? STATE_LABEL[st] : "Locked"}{!d.built && unlocked ? " · content coming" : ""}</span></span><span className="small muted">{unlocked && d.built ? `${labPct(d, progress.find(p => p.session_id === d.id))}%` : ""}</span></>;
+                      const inner = <><span className="ic">{st === "graded" || st === "complete" || st === "submitted" ? "✓" : d.day}</span><span><span className="t" title={d.title}>{d.title}</span><span className="s">{unlocked ? STATE_LABEL[st] : "Locked"}{!d.built && unlocked ? " · content coming" : ""}{unlocked && recs.some(r => r.session_id === d.id) ? " · 🎥 Recording" : ""}</span></span><span className="small muted">{unlocked && d.built ? `${labPct(d, progress.find(p => p.session_id === d.id))}%` : ""}</span></>;
                       return unlocked ? <Link key={d.id} className={cls} to={`/session/${d.id}`}>{inner}</Link> : <div key={d.id} className={cls} aria-disabled>{inner}</div>;
                     })}
                   </div>
