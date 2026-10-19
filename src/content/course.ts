@@ -2,7 +2,9 @@ import objectivesData from "./objectives.json";
 export const OBJECTIVES = objectivesData;
 const OBJECTIVE_IDS = new Set(objectivesData.objectives.map(o => o.id));
 export type QuizQ = { q: string; a: string[]; c: number; why: string };
-export type LensTerm = { term: string; plain: string; exam: string };
+// plain: the everyday analogy. def: the definition in the exam's own words. looks: how a question about it is usually framed.
+// trap: the wrong answer people fall for. exam: the domain and objective it maps to. def, looks, and trap are optional.
+export type LensTerm = { term: string; plain: string; exam: string; def?: string; looks?: string; trap?: string };
 export type Checkpoint =
   | { kind: "text"; prompt: string; placeholder?: string; minLength?: number }
   | { kind: "choice"; prompt: string; options: string[]; correct: number; why: string }
@@ -130,7 +132,7 @@ export function validateContent(c: unknown): string[] {
   if (!Array.isArray(x.quiz) || x.quiz.length !== 5) e.push("quiz: must have exactly 5 questions");
   else x.quiz.forEach((q: unknown, i: number) => { const t = q as Record<string, unknown>; if (!t.q || !Array.isArray(t.a) || (t.a as unknown[]).length < 3 || typeof t.c !== "number" || !t.why) e.push(`quiz[${i}]: needs q, a[3+], c, why`); if (Array.isArray(t.a) && typeof t.c === "number" && (t.c < 0 || t.c >= (t.a as unknown[]).length)) e.push(`quiz[${i}]: c out of range`); });
   if (!Array.isArray(x.lens) || x.lens.length < 3 || x.lens.length > 5) e.push("lens: need 3 to 5 Exam Lens terms");
-  else x.lens.forEach((t: unknown, i: number) => { const l = t as Record<string, unknown>; if (!l.term || !l.plain || !l.exam) e.push(`lens[${i}]: needs term, plain, exam`); if (l.exam && !/Domain/i.test(String(l.exam))) e.push(`lens[${i}]: exam text should name a Domain`); });
+  else x.lens.forEach((t: unknown, i: number) => { const l = t as Record<string, unknown>; if (!l.term || !l.plain || !l.exam) e.push(`lens[${i}]: needs term, plain, exam`); for (const k of ["def", "looks", "trap"]) if (l[k] !== undefined && (typeof l[k] !== "string" || !String(l[k]).trim())) e.push(`lens[${i}]: ${k} must be text when present`); if (l.exam && !/Domain/i.test(String(l.exam))) e.push(`lens[${i}]: exam text should name a Domain`); });
   if (!Array.isArray(x.doneWhen) || !x.doneWhen.length) e.push("doneWhen: missing");
   if (!Array.isArray(x.tools) || !x.tools.length) e.push("tools: list at least one tool");
   else x.tools.forEach((t: unknown, i: number) => { const tl = t as Record<string, unknown>; if (!tl.name || !tl.url || !tl.use || !tl.free) e.push(`tools[${i}]: needs name, url, use, free`); if (tl.url && !/^https?:\/\//.test(String(tl.url))) e.push(`tools[${i}]: url must start with http`); });

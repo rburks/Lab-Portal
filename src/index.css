@@ -130,6 +130,9 @@ input[type=radio], input[type=checkbox] { width: 18px; height: 18px; margin: 2px
 @media (max-width: 560px) { .term { grid-template-columns: 1fr; } }
 .term b { font-family: var(--mono); font-size: .85rem; color: var(--accent); }
 .term .exam { color: var(--mute); font-size: .88rem; margin-top: 3px; }
+.term .lens-row { margin-top: 8px; font-size: .94rem; line-height: 1.5; }
+.term .lens-k { display: inline-block; font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-right: 6px; }
+.term .lens-trap .lens-k { color: var(--warn); }
 
 .q { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 14px; }
 .q .prompt { font-weight: 600; margin-bottom: 10px; }
