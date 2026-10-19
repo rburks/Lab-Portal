@@ -85,7 +85,8 @@ function Overview({ d }: { d: Data }) {
   const stats = useMemo(() => computeStats(d.profiles, d.progress, d.subs, d.grades, d.releases, d.attendance), [d]);
   const top = [...stats].filter(s => s.openSessions > 0).sort((a, b) => b.composite - a.composite).slice(0, 5);
   const struggling = stats.filter(s => s.flags.length).sort((a, b) => b.flags.length - a.flags.length || a.composite - b.composite);
-  const ungraded = d.subs.filter(s => !d.grades.some(g => g.student_id === s.student_id && g.session_id === s.session_id && g.score != null));
+  const ungraded = d.subs.filter(s => !d.grades.some(g => g.student_id === s.student_id && g.session_id === s.session_id && g.score != null && g.graded_at >= s.created_at));
+  const wasGraded = (s: { student_id: string; session_id: string }) => d.grades.some(g => g.student_id === s.student_id && g.session_id === s.session_id && g.score != null);
   const ungradedPairs = new Set(ungraded.map(s => `${s.student_id}|${s.session_id}`)).size;
   const classLab = stats.length ? Math.round(stats.reduce((a, s) => a + s.labAvg, 0) / stats.length) : 0;
   const qs = stats.map(s => s.quizAvg).filter((q): q is number => q != null);
@@ -115,7 +116,7 @@ function Overview({ d }: { d: Data }) {
         <div className="card"><div className="row between"><h3>Grading queue</h3><NavLink to="/instructor?status=submitted#grid" className="small">Open in grid ↓</NavLink></div>
           <p className="small muted" style={{ margin: "4px 0 8px" }}>Most recent submissions without a score.</p>
           {[...ungraded].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8).map(s => { const p = d.profiles.find(x => x.id === s.student_id); const se = SESSIONS.find(x => x.id === s.session_id)!; return (
-            <div className="person" key={s.id}><div className="avatar">{initials(p?.full_name || "?")}</div><div style={{ minWidth: 0 }}><b>{p?.full_name}</b><div className="small muted" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>W{se.week} D{se.day} · {se.title}</div></div><span className="small muted">{fmtDate(s.created_at)}</span></div>); })}
+            <div className="person" key={s.id}><div className="avatar">{initials(p?.full_name || "?")}</div><div style={{ minWidth: 0 }}><b>{p?.full_name}</b><div className="small muted" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>W{se.week} D{se.day} · {se.title}</div></div><span className="small muted">{wasGraded(s) && <span className="pill warn" style={{ marginRight: 6 }}>Resubmitted</span>}{fmtDate(s.created_at)}</span></div>); })}
           {!ungraded.length && <div className="empty small">All caught up.</div>}
         </div>
       </div>
