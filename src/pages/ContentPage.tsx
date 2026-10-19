@@ -1,6 +1,6 @@
 // Instructor: session content import with validation and diff, daily verification, materials, attendance, export.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SESSIONS, WEEKS, diffContent, validateContent, type SessionContent } from "../content/course";
+import { SESSIONS, WEEKS, diffContent, pickContent, validateContent, type SessionContent } from "../content/course";
 import { useAuth } from "../auth";
 import { store, type Attendance, type ContentRow, type Material, type Profile, type Recording, type Release } from "../lib/store";
 import { buildSchedule, fmtLong, iso } from "../lib/schedule";
@@ -100,7 +100,11 @@ function Importer({ sel, current, onDone, toast }: { sel: string; current?: Sess
   type Parsed = { ok: SessionContent; err?: undefined } | { err: string; ok?: undefined };
   const parsed = useMemo<Parsed | null>(() => { if (!text.trim()) return null; try { return { ok: JSON.parse(text) as SessionContent }; } catch (e) { return { err: (e as Error).message }; } }, [text]);
   const good = parsed && parsed.ok ? parsed.ok : null;
-  const problems = good ? validateContent(good) : [];
+  const target = SESSIONS.find(x => x.id === sel);
+  const fileId = good ? (good as unknown as Record<string, unknown>).id : undefined;
+  // If a file names its session, it must match the session picked on the left.
+  const wrongSlot = typeof fileId === "string" && fileId !== sel ? [`This file is for ${fileId}, but ${sel} (Week ${target?.week} Day ${target?.day}) is selected. Pick the matching session on the left, then upload again.`] : [];
+  const problems = good ? [...wrongSlot, ...validateContent(good)] : [];
   const diff = good && !problems.length ? diffContent(current, good) : [];
   useEffect(() => { setText(""); setNote(""); }, [sel]);
   return (
@@ -110,10 +114,10 @@ function Importer({ sel, current, onDone, toast }: { sel: string; current?: Sess
       {parsed && parsed.err && <div className="tip-box small"><b>Not valid JSON:</b> {parsed.err}</div>}
       {good && problems.length > 0 && <div className="tip-box small"><b>{problems.length} problem{problems.length === 1 ? "" : "s"} to fix before import:</b><ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{problems.map((p, i) => <li key={i}>{p}</li>)}</ul></div>}
       {good && !problems.length && <>
-        <div className="see-box small"><b>Valid.</b> {good.steps!.length} steps, {good.quiz!.length} quiz questions, {good.lens!.length} Exam Lens terms, {good.tools!.length} tools{good.sandbox ? `, sandbox: ${good.sandbox}` : ""}. Exam block: {good.exam!.cards.length} cards, {good.exam!.practice.length} practice questions, objectives {good.exam!.objectives.join(", ") || "none (not tested)"}. Rubric: {good.rubric!.items.length} items.</div>
+        <div className="see-box small"><b>Valid. Importing into Week {target?.week} Day {target?.day}: {target?.title}.</b> {good.steps!.length} steps, {good.quiz!.length} quiz questions, {good.lens!.length} Exam Lens terms, {good.tools!.length} tools{good.sandbox ? `, sandbox: ${good.sandbox}` : ""}. Exam block: {good.exam!.cards.length} cards, {good.exam!.practice.length} practice questions, objectives {good.exam!.objectives.join(", ") || "none (not tested)"}. Rubric: {good.rubric!.items.length} items.</div>
         <div className="callout small"><b>Changes vs current:</b><ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{diff.map((d, i) => <li key={i}>{d}</li>)}</ul></div>
         {err && <div className="tip-box small"><b>Import failed:</b> {err}</div>}
-        <div className="row"><input id="version-note" placeholder="Version note, e.g. Built Oct 9; revised quiz Q3" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1, minWidth: 220 }} /><button className="btn" disabled={!note.trim()} onClick={async () => { try { await store.saveContent(sel, good, note.trim()); setText(""); setNote(""); await onDone(); toast("Content imported. Verify it before unlocking."); } catch (e) { setErr(describe(e)); } }}>Import</button></div>
+        <div className="row"><input id="version-note" placeholder="Version note, e.g. Built Oct 9; revised quiz Q3" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1, minWidth: 220 }} /><button className="btn" disabled={!note.trim()} onClick={async () => { try { await store.saveContent(sel, pickContent(good), note.trim()); setText(""); setNote(""); await onDone(); toast("Content imported. Verify it before unlocking."); } catch (e) { setErr(describe(e)); } }}>Import into W{target?.week} D{target?.day}</button></div>
       </>}
     </div>
   );
