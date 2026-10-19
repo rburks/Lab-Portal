@@ -69,8 +69,13 @@ export default function SessionPage() {
 function Lens({ s }: { s: Session }) {
   return (
     <div className="reading stack">
-      <p className="muted">The day's exam terms, in plain words first and exam words second. Add each to your flashcard deck.</p>
-      {s.lens!.map((t, i) => <div className="term" key={i}><b>{t.term}</b><div>{t.plain}<div className="exam">{t.exam}</div></div></div>)}
+      <p className="muted">The day's exam terms. The picture to remember comes first, then the definition the exam uses, how questions are framed, and the wrong answer to watch for.</p>
+      {s.lens!.map((t, i) => <div className="term" key={i}><b>{t.term}</b><div>
+        <div>{t.def ? <><span className="lens-k">Think of it as</span> </> : null}{t.plain}</div>
+        {t.def && <div className="lens-row"><span className="lens-k">Exam definition</span> {t.def}</div>}
+        {t.looks && <div className="lens-row"><span className="lens-k">On the exam</span> {t.looks}</div>}
+        {t.trap && <div className="lens-row lens-trap"><span className="lens-k">Watch out</span> {t.trap}</div>}
+        <div className="exam">{t.exam}</div></div></div>)}
     </div>
   );
 }
