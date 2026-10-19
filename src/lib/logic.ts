@@ -13,13 +13,17 @@ export type SessionState = "locked" | "not_started" | "in_progress" | "complete"
 
 export function sessionState(s: Session, p: Progress | undefined, subs: Submission[], g: Grade | undefined, unlocked: boolean): SessionState {
   if (!unlocked) return "locked";
-  if (g && g.score != null) return "graded";
+  if (g && g.score != null) return isResubmitted(subs, g) ? "submitted" : "graded";
   if (subs.length) return "submitted";
   const n = s.steps?.length || 0;
   const done = (p?.steps || []).filter(Boolean).length;
   if (!p || (done === 0 && p.quiz_best == null)) return "not_started";
   if (n && done >= n && p.quiz_best != null) return "complete";
   return "in_progress";
+}
+// True when the student sent new work after their last grade, so it needs grading again.
+export function isResubmitted(subs: Submission[], g: Grade | undefined) {
+  return !!g && g.score != null && subs.some(x => x.created_at > g.graded_at);
 }
 export const STATE_LABEL: Record<SessionState, string> = { locked: "Locked", not_started: "Not started", in_progress: "In progress", complete: "Complete", submitted: "Submitted", graded: "Graded" };
 
