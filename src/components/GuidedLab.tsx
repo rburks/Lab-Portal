@@ -22,6 +22,11 @@ export default function GuidedLab({ s, p, subs, save, reload, toast, onGoTo }: P
     const n = [...done]; while (n.length < steps.length) n.push(false); n[i] = true;
     await save({ steps: n }); setCur(i + 1);
   };
+  // Start over: clears completed steps but keeps saved answers, so students can redo and improve them.
+  const startOver = async () => {
+    if (!window.confirm("Start the lab over? Your steps will be unchecked. Your saved answers stay so you can change them.")) return;
+    await save({ steps: [] }); setCur(0); toast("Lab restarted. Your answers are still there to edit.");
+  };
   const saveResponse = async (i: number, v: unknown) => { await save({ responses: { ...responses, [String(i)]: v } }); };
 
   if (cur >= steps.length && allDone) return (
@@ -29,7 +34,7 @@ export default function GuidedLab({ s, p, subs, save, reload, toast, onGoTo }: P
       <div className="big">🎉</div><h2>Lab complete</h2>
       <p className="muted reading">You finished all {steps.length} steps. Check the list below, then submit your work and take the quiz.</p>
       <div className="callout" style={{ textAlign: "left", width: "100%", maxWidth: 560 }}><b>Done when</b><ul>{s.doneWhen!.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
-      <div className="row"><button className="btn" onClick={() => onGoTo("submit")}>Submit your work</button><button className="btn ghost" onClick={() => onGoTo("quiz")}>Take the quiz</button><button className="btn ghost" onClick={() => setCur(0)}>Review steps</button></div>
+      <div className="row"><button className="btn" onClick={() => onGoTo("submit")}>Submit your work</button><button className="btn ghost" onClick={() => onGoTo("quiz")}>Take the quiz</button><button className="btn ghost" onClick={() => setCur(0)}>Review steps</button><button className="btn ghost" onClick={startOver}>Start the lab over</button></div>
       {s.stretch && <div style={{ textAlign: "left", width: "100%", maxWidth: 560 }}><span className="eyebrow">Finished early? Stretch path</span><ul className="muted" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{s.stretch.map((x, i) => <li key={i}>{x}</li>)}</ul></div>}
     </div>
   );
@@ -44,6 +49,7 @@ export default function GuidedLab({ s, p, subs, save, reload, toast, onGoTo }: P
         {steps.map((x, k) => { const reach = k === 0 || done[k - 1] || done[k]; return (
           <button key={k} className={`${done[k] ? "done" : ""} ${k === i ? "cur" : ""} ${!reach ? "todo" : ""}`} disabled={!reach} onClick={() => setCur(k)} title={x.label}><span className="n">{done[k] ? "✓" : k + 1}</span><span>{x.label}</span></button>); })}
         {allDone && <button className="done" onClick={() => setCur(steps.length)}><span className="n">★</span><span>Finish</span></button>}
+        {completed > 0 && <button className="btn ghost xs" style={{ margin: "8px 4px 0" }} onClick={startOver}>Start the lab over</button>}
       </aside>
       <section className="step-card reading">
         <div><span className="eyebrow">Step {i + 1} of {steps.length}</span><h2>{st.label}</h2>{st.why && <p className="muted" style={{ marginTop: 4 }}>{st.why}</p>}</div>
