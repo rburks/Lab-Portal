@@ -35,7 +35,7 @@ export default function GuidedLab({ s, p, subs, save, reload, toast, onGoTo }: P
       <p className="muted reading">You finished all {steps.length} steps. Check the list below, then submit your work and take the quiz.</p>
       <div className="callout" style={{ textAlign: "left", width: "100%", maxWidth: 560 }}><b>Done when</b><ul>{s.doneWhen!.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
       <div className="row"><button className="btn" onClick={() => onGoTo("submit")}>Submit your work</button><button className="btn ghost" onClick={() => onGoTo("quiz")}>Take the quiz</button><button className="btn ghost" onClick={() => setCur(0)}>Review steps</button><button className="btn ghost" onClick={startOver}>Start the lab over</button></div>
-      {s.stretch && <div style={{ textAlign: "left", width: "100%", maxWidth: 560 }}><span className="eyebrow">Finished early? Stretch path</span><ul className="muted" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{s.stretch.map((x, i) => <li key={i}>{x}</li>)}</ul></div>}
+      {s.stretch && <div style={{ textAlign: "left", width: "100%", maxWidth: 560 }}><span className="eyebrow">Finished early? Stretch path</span><ul className="muted" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{s.stretch.map((x, i) => <li key={i}><Linkify text={x} /></li>)}</ul></div>}
     </div>
   );
 
@@ -54,7 +54,9 @@ export default function GuidedLab({ s, p, subs, save, reload, toast, onGoTo }: P
       <section className="step-card reading">
         <div><span className="eyebrow">Step {i + 1} of {steps.length}</span><h2>{st.label}</h2>{st.why && <p className="muted" style={{ marginTop: 4 }}>{st.why}</p>}</div>
         {i === 0 && s.goal && !st.checkpoint && <div className="stack" style={{ gap: 6 }}><span className="eyebrow">Your goal first</span><p className="muted">{s.goal}</p><textarea id="goal" value={goal} onChange={e => setGoal(e.target.value)} onBlur={() => { if (goal !== (p?.goal || "")) { save({ goal }); toast("Goal saved"); } }} placeholder="Write your goal in one or two sentences" /></div>}
-        <div><span className="eyebrow">Do this</span><ol className="do-list" style={{ marginTop: 8 }}>{st.do.map((d, k) => <li key={k}><span>{d}</span></li>)}</ol></div>
+        <div><span className="eyebrow">Do this</span><ol className="do-list" style={{ marginTop: 8 }}>{st.do.map((d, k) => { const l = linkItem(d); return l
+          ? <li key={k} className="link-li"><a className="link-row" href={l.url} target="_blank" rel="noopener noreferrer"><span>{l.label}</span><span className="link-open">Open ↗</span></a></li>
+          : <li key={k}><span><Linkify text={d} /></span></li>; })}</ol></div>
         <div className="see-box"><b>What you should see:</b> {st.see}</div>
         {st.tip && <div className="tip-box"><b>If it didn't work:</b> {st.tip}</div>}
         {st.checkpoint && <CheckpointBox cp={st.checkpoint} value={responses[String(i)]} subs={subs} sessionId={s.id} onSave={async v => { await saveResponse(i, v); if (i === 0 && st.checkpoint!.kind === "text" && s.goal) await save({ goal: String(v) }); }} reload={reload} toast={toast} />}
@@ -62,6 +64,23 @@ export default function GuidedLab({ s, p, subs, save, reload, toast, onGoTo }: P
       </section>
     </div>
   );
+}
+
+// An instruction shaped "Short label: https://..." becomes a clickable link row (no number) in place.
+const URL_RE = /(https?:\/\/[^\s]*[^\s.,;:)!?"'])/g; // trailing punctuation stays as text
+const cleanUrl = (u: string) => u.replace(/[.,;)]+$/, "");
+function linkItem(d: string): { label: string; url: string } | null {
+  const m = d.trim().match(/^([^:]{1,70}):\s*(https?:\/\/\S+)$/);
+  return m ? { label: m[1].trim(), url: cleanUrl(m[2]) } : null;
+}
+// Any other URL inside a sentence becomes a small button showing just the site name.
+function Linkify({ text }: { text: string }) {
+  const parts = text.split(URL_RE);
+  return <>{parts.map((part, k) => {
+    if (!/^https?:\/\//.test(part)) return <span key={k}>{part}</span>;
+    const url = cleanUrl(part); let host = url; try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { /* keep raw */ }
+    return <a key={k} className="inline-link" href={url} target="_blank" rel="noopener noreferrer">{host} ↗</a>;
+  })}</>;
 }
 
 function satisfied(cp: Checkpoint | undefined, v: unknown, subs: Submission[]) {
