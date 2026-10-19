@@ -345,3 +345,12 @@ table.grid td.day-cell { border-left: 1px solid var(--line); }
 .pf-item p { margin: 6px 0 0; font-size: .92rem; color: var(--ink-2); line-height: 1.5; }
 .pf-foot { font-size: .8rem; color: var(--mute); border-top: 1px solid var(--line); padding-top: 16px; }
 @media print { .pf-page { background: #fff; } .mode-banner { display: none; } .pf-item, .pf-cap { break-inside: avoid; } }
+
+/* Lab links: "Label: URL" steps become clickable rows; other URLs become small site-name buttons */
+.do-list li.link-li { display: block; counter-increment: none; }
+.do-list li.link-li::before { content: none; }
+.link-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); text-decoration: none; color: var(--ink); margin-left: 36px; }
+.link-row:hover { border-color: var(--accent); background: var(--accent-soft); }
+.link-open { font-weight: 600; color: var(--accent); white-space: nowrap; }
+.inline-link { display: inline-block; padding: 0 8px; margin: 0 2px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-weight: 600; text-decoration: none; font-size: .9em; }
+.inline-link:hover { background: var(--accent-soft); }
