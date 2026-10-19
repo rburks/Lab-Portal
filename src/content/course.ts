@@ -107,8 +107,16 @@ export function applyContent(map: Record<string, SessionContent>) {
   for (const s of SESSIONS) {
     const c = map[s.id];
     for (const k of CONTENT_KEYS) delete (s as unknown as Record<string, unknown>)[k];
-    if (c) { Object.assign(s, c); s.built = true; } else s.built = false;
+    // Copy only content fields. A stray id, week, day, or title in a file must never rename the session shell.
+    if (c) { Object.assign(s, pickContent(c)); s.built = true; } else s.built = false;
   }
+}
+
+// Keeps only the known content fields, so nothing else from an imported file is saved or applied.
+export function pickContent(c: SessionContent): SessionContent {
+  const src = c as unknown as Record<string, unknown>; const out: Record<string, unknown> = {};
+  for (const k of CONTENT_KEYS) if (src[k] !== undefined) out[k] = src[k];
+  return out as unknown as SessionContent;
 }
 
 // Validation for imported JSON. Returns a list of problems; empty means valid.
