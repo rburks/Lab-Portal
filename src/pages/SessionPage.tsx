@@ -3,9 +3,9 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { byId, type Session } from "../content/course";
 import { useAuth } from "../auth";
 import { useStudentData } from "./useStudentData";
-import { store, type Material, type Progress, type Recording, type Submission } from "../lib/store";
+import { store, type Grade, type Material, type Progress, type Recording, type Submission } from "../lib/store";
 import { useEffect } from "react";
-import { compressImage, isUnlocked } from "../lib/logic";
+import { compressImage, isResubmitted, isUnlocked } from "../lib/logic";
 import Sandbox from "../components/Sandbox";
 import GuidedLab from "../components/GuidedLab";
 import { SharePicker } from "./Showcase";
@@ -58,7 +58,7 @@ export default function SessionPage() {
           {tab === "sandbox" && <Sandbox onRecord={r => { save({ sandbox: r }); toast("Sandbox result recorded"); }} />}
           {tab === "lens" && <Lens s={s} />}
           {tab === "quiz" && <Quiz s={s} p={p} save={save} toast={toast} />}
-          {tab === "submit" && <Submit s={s} subs={subs} reload={data.reload} toast={toast} />}
+          {tab === "submit" && <Submit s={s} subs={subs} grade={grade} reload={data.reload} toast={toast} />}
           {tab === "resources" && <Resources s={s} mats={mats} recs={recs} toast={toast} />}
         </div>
       </div>
@@ -99,7 +99,7 @@ function Quiz({ s, p, save, toast }: { s: Session; p?: Progress; save: (x: Parti
   );
 }
 
-function Submit({ s, subs, reload, toast }: { s: Session; subs: Submission[]; reload: () => Promise<void>; toast: (m: string) => void }) {
+function Submit({ s, subs, grade, reload, toast }: { s: Session; subs: Submission[]; grade?: Grade; reload: () => Promise<void>; toast: (m: string) => void }) {
   const kinds = s.submission?.kinds || ["image", "link", "text"];
   const [kind, setKind] = useState<Submission["kind"]>(kinds[0]);
   const [body, setBody] = useState("");
@@ -121,6 +121,9 @@ function Submit({ s, subs, reload, toast }: { s: Session; subs: Submission[]; re
   return (
     <div className="reading submit-box">
       <p className="muted">{s.submission?.prompt || "Submit your work for this lab."}</p>
+      {subs.length > 0 && <div className="callout small">{grade && grade.score != null
+        ? (isResubmitted(subs, grade) ? "You've sent new work since your last grade. Your instructor will grade it again." : "This lab is graded. You can still improve it: submit again and your instructor will regrade it. You can resubmit as long as this session is open.")
+        : "You can add or remove work any time while this session is open."}</div>}
       <div className="chips">{kinds.map(k => <button key={k} className={kind === k ? "on" : ""} onClick={() => setKind(k)}>{k === "image" ? "Screenshot" : k === "link" ? "Link" : "Text"}</button>)}</div>
       {kind === "image" ? (
         <div className={`drop ${over ? "over" : ""}`} onDragOver={e => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={e => { e.preventDefault(); setOver(false); upload(e.dataTransfer.files); }}>
