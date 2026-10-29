@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { store, type Attendance, type ContentRow, type Material, type Profile, type Recording, type Release } from "../lib/store";
 import { buildSchedule, fmtLong, iso } from "../lib/schedule";
 import { download, fmtDate, initials, toCSV } from "../lib/logic";
+import { checkStudentGuide } from "../lib/guideCheck";
 
 function describe(e: unknown): string {
   const m = (e as { message?: string; code?: string; details?: string })?.message || String(e);
@@ -169,20 +170,21 @@ function Recordings({ sel, date, toast }: { sel: string; date?: string; toast: (
 }
 
 function Materials({ sel, mats, onDone, toast }: { sel: string; mats: Material[]; onDone: () => Promise<void>; toast: (m: string) => void }) {
-  const [kind, setKind] = useState<Material["kind"]>("student_guide"); const [title, setTitle] = useState(""); const [url, setUrl] = useState(""); const [busy, setBusy] = useState(false); const [mErr, setMErr] = useState(""); const fileRef = useRef<HTMLInputElement>(null);
+  const [kind, setKind] = useState<Material["kind"]>("student_guide"); const [title, setTitle] = useState(""); const [url, setUrl] = useState(""); const [busy, setBusy] = useState(false); const [mErr, setMErr] = useState(""); const [mNote, setMNote] = useState(""); const fileRef = useRef<HTMLInputElement>(null);
   const s = SESSIONS.find(x => x.id === sel)!;
   useEffect(() => { setTitle(kind === "student_guide" ? `Week ${s.week} Day ${s.day} Student Guide` : kind === "slides" ? "Slides (Gamma)" : kind === "lab_deck" ? "Lab deck (Gamma)" : ""); }, [kind, s]);
   return (
     <div className="card stack">
       <h3>Materials</h3>
-      <p className="small muted">Upload the student guide (PDF or Word) and add the Gamma links. Students see these at the top of the session and under Resources.</p>
+      <p className="small muted">Upload the student guide (Word .docx) and add the Gamma links. Students see these at the top of the session and under Resources. Every guide is checked before it's saved: an Instructor Guide, or a guide for a different session, is blocked.</p>
       <div className="row" style={{ alignItems: "flex-end" }}>
         <label className="stack" style={{ gap: 4, width: "auto" }}><span className="eyebrow">Type</span><select style={{ width: "auto" }} value={kind} onChange={e => setKind(e.target.value as Material["kind"])}><option value="student_guide">Student guide (file)</option><option value="slides">Slides link</option><option value="lab_deck">Lab deck link</option><option value="other">Other</option></select></label>
         <label className="stack" style={{ gap: 4, flex: 1, minWidth: 180 }}><span className="eyebrow">Title</span><input value={title} onChange={e => setTitle(e.target.value)} /></label>
-        {kind === "student_guide" ? <><button className="btn" disabled={busy || !title.trim()} onClick={() => fileRef.current?.click()}>{busy ? "Uploading…" : "Choose file and upload"}</button><input ref={fileRef} type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden onChange={async e => { const f = e.target.files?.[0]; if (!f) return; setBusy(true); try { await store.addMaterial({ session_id: sel, kind, title: title.trim(), file: f }); await onDone(); toast("Uploaded"); setMErr(""); } catch (err) { setMErr(describe(err)); } finally { setBusy(false); e.target.value = ""; } }} /></>
+        {kind === "student_guide" ? <><button className="btn" disabled={busy || !title.trim()} onClick={() => fileRef.current?.click()}>{busy ? "Uploading…" : "Choose file and upload"}</button><input ref={fileRef} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden onChange={async e => { const f = e.target.files?.[0]; if (!f) return; setBusy(true); setMNote(""); try { const chk = await checkStudentGuide(f, s); if (!chk.ok) { setMErr(chk.message); return; } await store.addMaterial({ session_id: sel, kind, title: title.trim(), file: f }); await onDone(); toast("Uploaded"); setMErr(""); setMNote(chk.warn ? `${chk.message} ${chk.warn}` : chk.message); } catch (err) { setMErr(describe(err)); } finally { setBusy(false); e.target.value = ""; } }} /></>
           : <><label className="stack" style={{ gap: 4, flex: 2, minWidth: 220 }}><span className="eyebrow">URL</span><input type="url" placeholder="https://gamma.app/docs/…" value={url} onChange={e => setUrl(e.target.value)} /></label><button className="btn" disabled={!url.trim() || !title.trim()} onClick={async () => { try { await store.addMaterial({ session_id: sel, kind, title: title.trim(), url: url.trim() }); setUrl(""); await onDone(); toast("Added"); setMErr(""); } catch (err) { setMErr(describe(err)); } }}>Add link</button></>}
       </div>
       {mErr && <div className="tip-box small"><b>Upload failed:</b> {mErr}</div>}
+      {mNote && !mErr && <div className="small muted">✓ {mNote}</div>}
       <div className="stack" style={{ gap: 6 }}>{mats.map(m => <div key={m.id} className="row between" style={{ padding: "6px 0", borderBottom: "1px solid var(--line)" }}><span className="small"><span className="pill" style={{ marginRight: 8 }}>{m.kind.replace("_", " ")}</span>{m.url ? <a href={m.url} target="_blank" rel="noreferrer">{m.title}</a> : m.title}</span><button className="btn ghost xs" onClick={async () => { await store.deleteMaterial(m.id); await onDone(); }}>Remove</button></div>)}{!mats.length && <div className="small muted">Nothing attached yet.</div>}</div>
     </div>
   );
