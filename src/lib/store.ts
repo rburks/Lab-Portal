@@ -43,7 +43,8 @@ export interface Store extends StoreExt, StoreContent, StoreMore {
   myGrades(): Promise<Grade[]>;
   releases(): Promise<Release[]>;
   // instructor
-  allProfiles(): Promise<Profile[]>;
+  // Students removed from the roster are left out (their work is kept; re-adding them brings it back). includeRemoved: true keeps them, for message history.
+  allProfiles(opts?: { includeRemoved?: boolean }): Promise<Profile[]>;
   allProgress(): Promise<Progress[]>;
   allSubmissions(): Promise<Submission[]>;
   allGrades(): Promise<Grade[]>;
@@ -67,7 +68,13 @@ class SupaStore implements Store {
     const { data: { user } } = await this.sb.auth.getUser();
     if (!user) return null;
     const { data } = await this.sb.from("profiles").select("*").eq("id", user.id).single();
-    return data as Profile | null;
+    const prof = data as Profile | null;
+    // A student removed from the roster loses access right away, even if they were already signed in.
+    if (prof && prof.role === "student") {
+      const { data: ok } = await this.sb.rpc("email_allowed", { e: prof.email });
+      if (ok === false) { await this.sb.auth.signOut(); return null; }
+    }
+    return prof;
   }
   async signInWithEmail(email: string) {
     const { data: ok } = await this.sb.rpc("email_allowed", { e: email });
@@ -109,7 +116,13 @@ class SupaStore implements Store {
   }
   async myGrades() { const { data } = await this.sb.from("grades").select("*"); return (data || []) as Grade[]; }
   async releases() { const { data } = await this.sb.from("releases").select("session_id,student_id,unlocked_at"); return (data || []) as Release[]; }
-  async allProfiles() { const { data } = await this.sb.from("profiles").select("*").order("full_name"); return (data || []) as Profile[]; }
+  async allProfiles(opts?: { includeRemoved?: boolean }) {
+    const [{ data }, { data: r }] = await Promise.all([this.sb.from("profiles").select("*").order("full_name"), this.sb.from("roster").select("email")]);
+    const all = (data || []) as Profile[];
+    if (opts?.includeRemoved || !r) return all;
+    const on = new Set((r as { email: string }[]).map(x => x.email.toLowerCase()));
+    return all.filter(p => p.role !== "student" || on.has((p.email || "").toLowerCase()));
+  }
   async allProgress() { return this.myProgress(); }
   async allSubmissions() { const { data } = await this.sb.from("submissions").select("*").order("created_at"); return this.withUrls((data || []) as Submission[]); }
   async allGrades() { return this.myGrades(); }
@@ -385,7 +398,7 @@ class DemoStore implements Store {
   async deleteSubmission(id: number) { this.d.submissions = this.d.submissions.filter(s => s.id !== id); }
   async myGrades() { return this.d.grades.filter(g => g.student_id === this.me); }
   async releases() { return this.d.releases; }
-  async allProfiles() { return this.d.profiles; }
+  async allProfiles(opts?: { includeRemoved?: boolean }) { if (opts?.includeRemoved) return this.d.profiles; const on = new Set(this.d.roster.map(r => r.email.toLowerCase())); return this.d.profiles.filter(p => p.role !== "student" || on.has(p.email.toLowerCase())); }
   async allProgress() { return this.d.progress; }
   async allSubmissions() { return this.d.submissions; }
   async allGrades() { return this.d.grades; }
