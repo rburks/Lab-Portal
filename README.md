@@ -39,6 +39,8 @@ Open the local URL. With no `.env` file the app runs in demo mode with 12 exampl
 3. Confirm in **Table Editor → profiles** that your row has role `instructor`. If not, run:
    `update public.profiles set role = 'instructor' where email = 'you@example.com';`
 4. Reload the site. You now have the **Instructor** tab. Go to **Class → Roster** and add your students (name and email per row, or paste a list).
+
+**Removing a student.** Class → Roster → Remove takes them off every class view (Dashboard, grading, attendance, exam readiness, Calendar, Showcase) and signs them out the next time the portal loads for them. Their work and grades stay in the database, so adding the same email back restores everything. Message history with them stays readable in Messages.
 5. Go to **Sessions**, pick Week 1 Day 1, and click **Unlock for class**. Students see everything else as locked.
 
 ### 4. Before each class
