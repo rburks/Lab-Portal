@@ -398,7 +398,7 @@ function Roster({ d, reload }: { d: Data; reload: () => Promise<void> }) {
                 {(() => { const st = sending[r.email]; return st === "sending" ? <span className="small muted">Sending…</span> : st === "sent" ? <span className="pill good" title="Ask them to use the newest email">Link sent</span> : <>
                   {st && <span className="pill bad" title={st}>Failed</span>}
                   <button className="btn ghost xs" title={st || "Email this student a sign-in link"} onClick={async () => { const err = await sendOne(r.email); toast(err ? `Couldn't send: ${err}` : `Sign-in link sent to ${r.email}`); }}>{st ? "Retry" : "Send link"}</button></>; })()}
-                <button className="btn ghost xs" onClick={async () => { await store.removeFromRoster(r.email); await load(); toast("Removed"); }}>Remove</button></div></td></tr>); })}
+                <button className="btn ghost xs" title="Removes them from every class view and signs them out. Their work is kept, and adding them back restores it." onClick={async () => { await store.removeFromRoster(r.email); await load(); await reload(); toast("Removed. Their work is kept if you add them back."); }}>Remove</button></div></td></tr>); })}
         </tbody></table></div></div>
     </div>
   );

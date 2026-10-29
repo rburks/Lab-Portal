@@ -17,7 +17,7 @@ export default function MessagesPage() {
   const [thread, setThread] = useState<string | null>(isInstr ? null : user!.id);
   useEffect(() => { setThread(isInstr ? null : user!.id); }, [isInstr]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState<"dm" | "ann" | "email">("dm");
-  const reload = useCallback(async () => { const [m, a] = await Promise.all([store.messages(isInstr ? undefined : user!.id), store.announcements()]); setMsgs(m); setAnns(a); if (isInstr) { const [p, r] = await Promise.all([store.allProfiles(), store.roster().catch(() => [])]); setProfiles(p); setRoster(r); } }, [isInstr, user]);
+  const reload = useCallback(async () => { const [m, a] = await Promise.all([store.messages(isInstr ? undefined : user!.id), store.announcements()]); setMsgs(m); setAnns(a); if (isInstr) { const [p, r] = await Promise.all([store.allProfiles({ includeRemoved: true }), store.roster().catch(() => [])]); setProfiles(p); setRoster(r); } }, [isInstr, user]);
   useEffect(() => { reload(); const t = setInterval(reload, 20000); return () => clearInterval(t); }, [reload]);
   useEffect(() => { if (thread && !preview) store.markRead(thread).then(reload); }, [thread]); // eslint-disable-line react-hooks/exhaustive-deps
   const students = profiles.filter(p => p.role === "student");
