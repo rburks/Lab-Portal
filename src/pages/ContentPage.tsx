@@ -25,7 +25,15 @@ export function ContentPage() {
   const reload = useCallback(async () => { const [c, m, r, p] = await Promise.all([store.allContent(), store.materials(), store.releases(), store.allProfiles()]); setRows(c); setMats(m); setReleases(r); setStudents(p.filter(x => x.role === "student")); }, []);
   useEffect(() => { reload(); }, [reload]);
   const [dates, setDates] = useState<Record<string, string>>({});
-  useEffect(() => { Promise.all([store.settings(), store.calendarDays()]).then(([st, days]) => setDates(Object.fromEntries(buildSchedule(st, days).filter(x => x.session).map(x => [x.session!.id, x.date])))).catch(() => {}); }, []);
+  const [datesError, setDatesError] = useState<string | null>(null);
+  // Class dates come from the calendar, so buffer and holiday days are already applied here.
+  // On first load, jump to the next session coming up (today or later), which is the one to upload for.
+  useEffect(() => { Promise.all([store.settings(), store.calendarDays()]).then(([st, days]) => {
+    const sched = buildSchedule(st, days).filter(x => x.session);
+    setDates(Object.fromEntries(sched.map(x => [x.session!.id, x.date])));
+    const next = sched.find(x => x.date >= iso(new Date()));
+    if (next) setSel(next.session!.id);
+  }).catch(e => setDatesError(e instanceof Error ? e.message : String(e))); }, []);
   const schedDate = (id: string) => dates[id];
   const row = rows.find(r => r.session_id === sel);
   const s = SESSIONS.find(x => x.id === sel)!;
@@ -45,14 +53,15 @@ export function ContentPage() {
               {days.map(x => { const r = rows.find(q => q.session_id === x.id); const st = status(r); const open = openForClass(x.id); const early = earlyFor(x.id).length; return (
                 <button key={x.id} onClick={() => setSel(x.id)} className="sess" style={{ width: "100%", marginBottom: 4, borderColor: sel === x.id ? "var(--accent)" : "var(--line)", display: "grid", gridTemplateColumns: "18px minmax(0,1fr) auto", gap: 8, alignItems: "center", padding: "8px 10px" }} title={open ? "Open for the whole class" : early ? `Locked; open early for ${early}` : "Locked"}>
                   <span style={{ fontSize: ".9rem", color: open ? "var(--good)" : "var(--mute)" }}>{open ? "●" : early ? "◐" : "○"}</span>
-                  <span className="small" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}><b>D{x.day}</b> · {x.title}</span>
+                  <span className="small" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}><b>D{x.day}</b>{dates[x.id] ? <span className="muted"> · {fmtLong(dates[x.id])}</span> : null} · {x.title}</span>
                   <span className={`pill ${st.cls}`} style={{ fontSize: ".66rem" }}>{st.label}</span>
                 </button>); })}
             </div>); })}
           <div className="small muted" style={{ padding: "4px 8px" }}>● open to class · ◐ early access for some · ○ locked</div>
         </aside>
         <section className="stack" style={{ gap: 14 }}>
-          <div className="card"><span className="eyebrow">Week {s.week} · Day {s.day}</span><h2>{s.title}</h2>
+          <div className="card"><span className="eyebrow">Week {s.week} · Day {s.day}{schedDate(sel) ? ` · Class date ${fmtLong(schedDate(sel)!)}` : ""}</span><h2>{s.title}</h2>
+            {datesError && <p className="small" style={{ color: "var(--bad)", marginTop: 6 }}>Could not load class dates from the calendar: {datesError}</p>}
             {row ? <div className="row small muted" style={{ marginTop: 6 }}><span className={`pill ${status(row).cls}`}>{status(row).label}</span><span>Imported {fmtDate(row.updated_at)}{row.version_note ? ` · ${row.version_note}` : ""}</span></div> : <p className="small muted" style={{ marginTop: 6 }}>No content imported yet. Students who open this session see a "being built" notice.</p>}</div>
           <Access sel={sel} row={row} mats={mats.filter(m => m.session_id === sel)} students={students} openForClass={openForClass(sel)} early={earlyFor(sel)} onChange={reload} toast={toast} />
           <Importer sel={sel} current={row?.content} onDone={async () => { await reload(); await reloadContent(); }} toast={toast} />

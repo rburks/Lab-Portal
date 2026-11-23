@@ -5,7 +5,8 @@ import type { CalendarDay, CourseSettings } from "./types-ext";
 
 export type ScheduledDay = { date: string; kind: "session" | "holiday" | "buffer"; session?: Session; label?: string };
 
-export const iso = (d: Date) => d.toISOString().slice(0, 10);
+// Local calendar date (not UTC), so evening class times in Alabama still count as "today".
+export const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export const parse = (s: string) => new Date(s + "T12:00:00");
 
 export function buildSchedule(settings: CourseSettings, exceptions: CalendarDay[]): ScheduledDay[] {
@@ -21,6 +22,13 @@ export function buildSchedule(settings: CourseSettings, exceptions: CalendarDay[
     }
     d.setDate(d.getDate() + 1);
   }
+  return out;
+}
+// Every class date in the same Sun to Sat week as the given date.
+export function classDaysInWeek(day: string, classDays: number[]) {
+  const d = parse(day); d.setDate(d.getDate() - d.getDay());
+  const out: string[] = [];
+  for (let k = 0; k < 7; k++) { if (classDays.includes(d.getDay())) out.push(iso(d)); d.setDate(d.getDate() + 1); }
   return out;
 }
 export const dateOf = (schedule: ScheduledDay[], sessionId: string) => schedule.find(s => s.session?.id === sessionId)?.date;
