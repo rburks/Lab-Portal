@@ -145,8 +145,8 @@ class SupaStore implements Store {
   // ----- extension -----
   async settings() { const { data } = await this.sb.from("course_settings").select("*").eq("id", 1).single(); const d = data as (CourseSettings & { id?: number; updated_at?: string }) | null; if (!d) return { start_date: "2026-10-12", class_days: [1, 2, 4], email_on: false, showcase_posting: true, showcase_comments: true }; const { id: _i, updated_at: _u, ...rest } = d; void _i; void _u; return rest as CourseSettings; }
   async saveSettings(s: CourseSettings) { await this.sb.from("course_settings").upsert({ id: 1, ...s, updated_at: new Date().toISOString() }); }
-  async calendarDays() { const { data } = await this.sb.from("calendar_days").select("day,kind,label").order("day"); return (data || []) as CalendarDay[]; }
-  async setCalendarDay(d: CalendarDay | { day: string; remove: true }) { if ("remove" in d) await this.sb.from("calendar_days").delete().eq("day", d.day); else await this.sb.from("calendar_days").upsert(d, { onConflict: "day" }); }
+  async calendarDays() { const { data, error } = await this.sb.from("calendar_days").select("day,kind,label").order("day"); if (error) throw new Error(error.message); return (data || []) as CalendarDay[]; }
+  async setCalendarDay(d: CalendarDay | { day: string; remove: true }) { const { error } = "remove" in d ? await this.sb.from("calendar_days").delete().eq("day", d.day) : await this.sb.from("calendar_days").upsert({ day: d.day, kind: d.kind, label: d.label }, { onConflict: "day" }); if (error) throw new Error(error.message); }
   async slots() { const { data } = await this.sb.from("office_hour_slots").select("*").order("weekday").order("start_time"); return (data || []) as Slot[]; }
   async saveSlot(sl: Omit<Slot, "id"> & { id?: number }) { await this.sb.from("office_hour_slots").upsert(sl); }
   async deleteSlot(id: number) { await this.sb.from("office_hour_slots").delete().eq("id", id); }
