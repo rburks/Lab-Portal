@@ -1,10 +1,28 @@
 // Calendar page: course schedule by month. Students see dates and book office hours.
 // Instructor adds holidays and buffer days (which push later sessions back) and manages slots.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../auth";
 import { store, type CalendarDay, type CourseSettings, type OHRequest, type Profile, type Slot } from "../lib/store";
-import { buildSchedule, fmtLong, fmtTime, iso, nextDates, parse, WEEKDAYS, type ScheduledDay } from "../lib/schedule";
+import { buildSchedule, classDaysInWeek, fmtLong, fmtTime, iso, nextDates, parse, WEEKDAYS, type ScheduledDay } from "../lib/schedule";
+
+type DayChange = CalendarDay | { day: string; remove: true };
+type Adding = { day: string; kind: "holiday" | "buffer"; label: string; week: boolean };
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+// Turns the add form into the list of dates to save: one day, or every class day in that week.
+function changesFor(a: Adding, classDays: number[]): CalendarDay[] {
+  const dates = a.week ? classDaysInWeek(a.day, classDays) : [a.day];
+  const fallback = a.week ? (a.kind === "holiday" ? "Holiday week" : "Buffer week") : null;
+  return dates.map(day => ({ day, kind: a.kind, label: a.label.trim() || fallback }));
+}
+
+// Scrolls the add form into view when it opens (it sits above the calendar and is easy to miss on a phone).
+function useScrollIntoView(open: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (open) ref.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, [open]);
+  return ref;
+}
 
 export default function CalendarPage() {
   const { user, toast, mode } = useAuth();
@@ -18,11 +36,22 @@ export default function CalendarPage() {
   const [tab, setTab] = useState<"schedule" | "office">(() => loc.search.includes("tab=office") ? "office" : "schedule");
   useEffect(() => { setTab(loc.search.includes("tab=office") ? "office" : "schedule"); }, [loc.search]);
   const [view, setView] = useState<"month" | "list">("month");
+  const [calError, setCalError] = useState<string | null>(null);
   const reload = useCallback(async () => {
-    const [s, d, sl, r] = await Promise.all([store.settings(), store.calendarDays(), store.slots(), store.ohRequests()]);
-    setSettings(s); setDays(d); setSlots(sl); setReqs(r);
+    const [s, sl, r] = await Promise.all([store.settings(), store.slots(), store.ohRequests()]);
+    setSettings(s); setSlots(sl); setReqs(r);
+    try { setDays(await store.calendarDays()); } catch (e) { setCalError(`Could not load buffer and holiday days: ${errText(e)}`); }
     if (user?.role === "instructor") setProfiles(await store.allProfiles());
   }, [user?.role]);
+  // Saves every change, then reloads from the database so the calendar shows what was actually stored.
+  const applyChanges = async (changes: DayChange[]) => {
+    setCalError(null);
+    let saved = 0;
+    try { for (const c of changes) { await store.setCalendarDay(c); saved++; } }
+    catch (e) { setCalError(`Calendar not saved${saved ? ` (${saved} of ${changes.length} days saved)` : ""}: ${errText(e)}`); }
+    await reload();
+    if (saved === changes.length) toast(changes.length > 1 ? `Calendar updated: ${changes.length} days` : "Calendar updated");
+  };
   useEffect(() => { reload(); }, [reload]);
   const schedule = useMemo(() => settings ? buildSchedule(settings, days) : [], [settings, days]);
   if (!settings) return <div className="empty">Loading calendar…</div>;
@@ -36,15 +65,18 @@ export default function CalendarPage() {
       </div>
       {tab === "schedule" && <div className="row between" style={{ marginBottom: 12 }}><div className="chips"><button className={view === "month" ? "on" : ""} onClick={() => setView("month")}>Month</button><button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>Full list</button></div>
         <div className="row small muted"><span className="ev" style={{ background: "var(--accent-soft)", color: "var(--accent)", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Session</span><span style={{ background: "var(--panel-2)", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Holiday</span><span style={{ background: "var(--warn-soft)", color: "var(--warn)", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Buffer</span><span style={{ background: "var(--good-soft)", color: "var(--good)", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Office hours</span></div></div>}
-      {tab === "schedule" && view === "month" && <MonthView schedule={schedule} days={days} reqs={reqs} isInstr={!!isInstr} onChange={async (d) => { await store.setCalendarDay(d); await reload(); toast("Calendar updated"); }} />}
-      {tab === "schedule" && view === "list" && <Schedule schedule={schedule} days={days} isInstr={!!isInstr} onChange={async (d) => { await store.setCalendarDay(d); await reload(); toast("Calendar updated"); }} />}
+      {tab === "schedule" && calError && <div className="card" role="alert" style={{ marginBottom: 12, borderColor: "var(--bad)", color: "var(--bad)" }}><div className="row between"><span className="small"><b>{calError}</b> Nothing on the calendar moved. Try again, or check that you are signed in as the instructor.</span><button className="btn ghost xs" onClick={() => setCalError(null)} aria-label="Dismiss">×</button></div></div>}
+      {tab === "schedule" && view === "month" && <MonthView schedule={schedule} days={days} reqs={reqs} isInstr={!!isInstr} classDays={settings.class_days} onChange={applyChanges} />}
+      {tab === "schedule" && view === "list" && <Schedule schedule={schedule} days={days} isInstr={!!isInstr} classDays={settings.class_days} onChange={applyChanges} />}
       {tab === "office" ? <OfficeHours slots={slots} reqs={reqs} profiles={profiles} isInstr={!!isInstr} userId={user!.id} reload={reload} toast={toast} /> : null}
     </>
   );
 }
 
-function Schedule({ schedule, days, isInstr, onChange }: { schedule: ScheduledDay[]; days: CalendarDay[]; isInstr: boolean; onChange: (d: CalendarDay | { day: string; remove: true }) => Promise<void> }) {
-  const [adding, setAdding] = useState<{ day: string; kind: "holiday" | "buffer"; label: string } | null>(null);
+function Schedule({ schedule, days, isInstr, classDays, onChange }: { schedule: ScheduledDay[]; days: CalendarDay[]; isInstr: boolean; classDays: number[]; onChange: (c: DayChange[]) => Promise<void> }) {
+  const [adding, setAdding] = useState<Adding | null>(null);
+  const [busy, setBusy] = useState(false);
+  const formRef = useScrollIntoView(!!adding);
   const months = useMemo(() => { const m = new Map<string, ScheduledDay[]>(); schedule.forEach(d => { const k = d.date.slice(0, 7); if (!m.has(k)) m.set(k, []); m.get(k)!.push(d); }); return [...m.entries()]; }, [schedule]);
   const today = iso(new Date());
   return (
@@ -52,16 +84,17 @@ function Schedule({ schedule, days, isInstr, onChange }: { schedule: ScheduledDa
       {isInstr && (
         <div className="card"><div className="row between">
           <div><h3>Buffer and holiday days</h3><p className="small muted">Marking a class date pushes every later session back one class day. Remove it to pull them forward again.</p></div>
-          <button className="btn sm" onClick={() => setAdding({ day: today, kind: "buffer", label: "" })}>Add a day</button>
+          <button className="btn sm" onClick={() => setAdding({ day: today, kind: "buffer", label: "", week: false })}>Add a day or week</button>
         </div>
-          {adding && <div className="row" style={{ marginTop: 12, alignItems: "flex-end" }}>
+          {adding && <div ref={formRef} className="row" style={{ marginTop: 12, alignItems: "flex-end" }}>
             <label className="stack" style={{ gap: 4, width: "auto" }}><span className="eyebrow">Date</span><input id="cal-day" type="date" value={adding.day} onChange={e => setAdding({ ...adding, day: e.target.value })} style={{ width: "auto" }} /></label>
             <label className="stack" style={{ gap: 4, width: "auto" }}><span className="eyebrow">Type</span><select value={adding.kind} onChange={e => setAdding({ ...adding, kind: e.target.value as "holiday" | "buffer" })} style={{ width: "auto" }}><option value="buffer">Buffer (catch-up, no new session)</option><option value="holiday">Holiday (no class)</option></select></label>
-            <label className="stack" style={{ gap: 4, flex: 1, minWidth: 160 }}><span className="eyebrow">Label</span><input id="cal-label" placeholder={adding.kind === "buffer" ? "Catch-up day" : "Thanksgiving"} value={adding.label} onChange={e => setAdding({ ...adding, label: e.target.value })} /></label>
-            <button className="btn" onClick={async () => { await onChange({ day: adding.day, kind: adding.kind, label: adding.label || null }); setAdding(null); }}>Save</button>
+            <label className="stack" style={{ gap: 4, flex: 1, minWidth: 160 }}><span className="eyebrow">Label</span><input id="cal-label" placeholder={adding.week ? (adding.kind === "buffer" ? "Buffer week" : "Holiday week") : adding.kind === "buffer" ? "Catch-up day" : "Thanksgiving"} value={adding.label} onChange={e => setAdding({ ...adding, label: e.target.value })} /></label>
+            <WeekToggle adding={adding} setAdding={setAdding} classDays={classDays} />
+            <button className="btn" disabled={busy} onClick={async () => { setBusy(true); await onChange(changesFor(adding, classDays)); setBusy(false); setAdding(null); }}>{busy ? "Saving…" : "Save"}</button>
             <button className="btn ghost" onClick={() => setAdding(null)}>Cancel</button>
           </div>}
-          {days.length > 0 && <div className="row" style={{ marginTop: 12 }}>{days.map(d => <span key={d.day} className={`pill ${d.kind === "holiday" ? "" : "acc"}`}>{fmtLong(d.day)} · {d.label || d.kind}<button className="btn ghost xs" style={{ marginLeft: 6, padding: "0 6px" }} onClick={() => onChange({ day: d.day, remove: true })} aria-label="Remove">×</button></span>)}</div>}
+          {days.length > 0 && <div className="row" style={{ marginTop: 12 }}>{days.map(d => <span key={d.day} className={`pill ${d.kind === "holiday" ? "" : "acc"}`}>{fmtLong(d.day)} · {d.label || d.kind}<button className="btn ghost xs" style={{ marginLeft: 6, padding: "0 6px" }} onClick={() => onChange([{ day: d.day, remove: true }])} aria-label="Remove">×</button></span>)}</div>}
         </div>)}
       <div className="weeks">
         {months.map(([k, list]) => (
@@ -188,12 +221,14 @@ function RequestRow({ r, isInstr, name, onAct }: { r: OHRequest; isInstr: boolea
   );
 }
 
-function MonthView({ schedule, days, reqs, isInstr, onChange }: { schedule: ScheduledDay[]; days: CalendarDay[]; reqs: OHRequest[]; isInstr: boolean; onChange: (d: CalendarDay | { day: string; remove: true }) => Promise<void> }) {
+function MonthView({ schedule, days, reqs, isInstr, classDays, onChange }: { schedule: ScheduledDay[]; days: CalendarDay[]; reqs: OHRequest[]; isInstr: boolean; classDays: number[]; onChange: (c: DayChange[]) => Promise<void> }) {
   const todayIso = iso(new Date());
   const first = schedule[0]?.date || todayIso;
   const initial = todayIso >= first && todayIso <= (schedule[schedule.length - 1]?.date || todayIso) ? todayIso : first;
   const [ym, setYm] = useState(initial.slice(0, 7));
-  const [adding, setAdding] = useState<{ day: string; kind: "holiday" | "buffer"; label: string } | null>(null);
+  const [adding, setAdding] = useState<Adding | null>(null);
+  const [busy, setBusy] = useState(false);
+  const formRef = useScrollIntoView(!!adding);
   const [y, m] = ym.split("-").map(Number);
   const firstDay = new Date(y, m - 1, 1); const startPad = firstDay.getDay(); const dim = new Date(y, m, 0).getDate();
   const cells: (string | null)[] = [...Array(startPad).fill(null), ...Array.from({ length: dim }, (_, i) => `${ym}-${String(i + 1).padStart(2, "0")}`)];
@@ -206,13 +241,14 @@ function MonthView({ schedule, days, reqs, isInstr, onChange }: { schedule: Sche
     <div className="card">
       <div className="row between" style={{ marginBottom: 12 }}>
         <div className="row"><button className="btn ghost sm" onClick={() => shift(-1)} aria-label="Previous month">‹</button><h3 style={{ minWidth: 170, textAlign: "center" }}>{label}</h3><button className="btn ghost sm" onClick={() => shift(1)} aria-label="Next month">›</button><button className="btn ghost sm" onClick={() => setYm(todayIso.slice(0, 7))}>Today</button></div>
-        {isInstr && <span className="small muted">Click any class day to add a holiday or buffer day.</span>}
+        {isInstr && <span className="small muted">Click any class day to add a holiday or buffer day, or the whole week.</span>}
       </div>
-      {adding && <div className="row" style={{ marginBottom: 12, alignItems: "flex-end" }}>
+      {adding && <div ref={formRef} className="row" style={{ marginBottom: 12, alignItems: "flex-end" }}>
         <span className="pill acc">{fmtLong(adding.day)}</span>
         <select value={adding.kind} onChange={e => setAdding({ ...adding, kind: e.target.value as "holiday" | "buffer" })} style={{ width: "auto" }}><option value="buffer">Buffer (catch-up, no new session)</option><option value="holiday">Holiday (no class)</option></select>
-        <input placeholder={adding.kind === "buffer" ? "Catch-up day" : "Thanksgiving"} value={adding.label} onChange={e => setAdding({ ...adding, label: e.target.value })} style={{ flex: 1, minWidth: 160 }} />
-        <button className="btn" onClick={async () => { await onChange({ day: adding.day, kind: adding.kind, label: adding.label || null }); setAdding(null); }}>Save</button>
+        <input placeholder={adding.week ? (adding.kind === "buffer" ? "Buffer week" : "Holiday week") : adding.kind === "buffer" ? "Catch-up day" : "Thanksgiving"} value={adding.label} onChange={e => setAdding({ ...adding, label: e.target.value })} style={{ flex: 1, minWidth: 160 }} />
+        <WeekToggle adding={adding} setAdding={setAdding} classDays={classDays} />
+        <button className="btn" disabled={busy} onClick={async () => { setBusy(true); await onChange(changesFor(adding, classDays)); setBusy(false); setAdding(null); }}>{busy ? "Saving…" : "Save"}</button>
         <button className="btn ghost" onClick={() => setAdding(null)}>Cancel</button>
       </div>}
       <div className="month">
@@ -222,8 +258,8 @@ function MonthView({ schedule, days, reqs, isInstr, onChange }: { schedule: Sche
           const sd = byDate.get(d); const ex = days.find(x => x.day === d); const oh = ohByDate.get(d) || [];
           const cls = `mday ${d === todayIso ? "today" : ""} ${sd && sd.kind !== "session" ? "off" : ""}`;
           return (
-            <div key={d} className={cls} onClick={isInstr && sd && sd.kind === "session" ? () => setAdding({ day: d, kind: "buffer", label: "" }) : undefined} style={isInstr && sd?.kind === "session" ? { cursor: "pointer" } : {}}>
-              <div className="row between"><span className="dn">{Number(d.slice(8))}</span>{ex && isInstr && <button className="btn ghost xs" style={{ padding: "0 5px" }} onClick={e => { e.stopPropagation(); onChange({ day: d, remove: true }); }} aria-label="Remove">×</button>}</div>
+            <div key={d} className={cls} onClick={isInstr && sd && sd.kind === "session" ? () => setAdding({ day: d, kind: "buffer", label: "", week: false }) : undefined} style={isInstr && sd?.kind === "session" ? { cursor: "pointer" } : {}}>
+              <div className="row between"><span className="dn">{Number(d.slice(8))}</span>{ex && isInstr && <button className="btn ghost xs" style={{ padding: "0 5px" }} onClick={e => { e.stopPropagation(); onChange([{ day: d, remove: true }]); }} aria-label="Remove">×</button>}</div>
               {sd?.kind === "session" && <Link to={`/session/${sd.session!.id}`} className="ev" title={sd.session!.title} onClick={e => e.stopPropagation()}>W{sd.session!.week} D{sd.session!.day} · {sd.session!.title}</Link>}
               {sd && sd.kind !== "session" && <span className={`ev ${sd.kind === "holiday" ? "hol" : "buf"}`} title={sd.label}>{sd.label}</span>}
               {oh.slice(0, 2).map(r => <span key={r.id} className="ev oh" title={r.topic}>{fmtTime(r.requested_at.slice(11, 16))} office hrs{r.status === "pending" ? " (pending)" : ""}</span>)}
@@ -232,5 +268,16 @@ function MonthView({ schedule, days, reqs, isInstr, onChange }: { schedule: Sche
         })}
       </div>
     </div>
+  );
+}
+
+// "Whole week" checkbox for the add form, listing the class dates it will mark.
+function WeekToggle({ adding, setAdding, classDays }: { adding: Adding; setAdding: (a: Adding) => void; classDays: number[] }) {
+  const dates = classDaysInWeek(adding.day, classDays);
+  return (
+    <label className="row small" style={{ gap: 6, width: "auto", alignSelf: "center", cursor: "pointer" }} title={dates.map(fmtLong).join(", ")}>
+      <input type="checkbox" checked={adding.week} onChange={e => setAdding({ ...adding, week: e.target.checked })} style={{ width: "auto" }} />
+      Whole week ({dates.map(d => WEEKDAYS[parse(d).getDay()]).join(", ")})
+    </label>
   );
 }
